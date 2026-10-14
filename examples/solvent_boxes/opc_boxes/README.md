@@ -4,7 +4,7 @@ Cada caja se construyó con `build_box.sh`, se equilibró 10 ns en NPT a 300 K y
 
 | Solvente | Mezcla | Composición | Densidad (g/cm3) | Lado (A) |
 |---|---|---|---|---|
-| ETAO | etanol | ver `ETAO.config` | 0.9678 | 39.67 |
+| ETAO | etanol | 136 ETA + 1672 WAT | 0.9678 | 39.67 |
 | ANTO | acetonitrilo | 136 ANT + 1672 WAT | 0.9565 | 39.58 |
 | MOHO | metanol | 448 MOH + 3760 WAT | 0.9682 | 52.02 |
 | ISOO | isopropanol 20 % | 112 ISO + 1672 WAT | 0.9696 | 39.81 |
