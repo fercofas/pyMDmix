@@ -48,6 +48,20 @@ Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB
 ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)"
 ```
 
+## Pasos de 4 fs y corrida automática de réplicas (opcional)
+
+Después de `mdmix create project`, dentro de la carpeta `MD` del proyecto:
+
+```bash
+bash /ruta/a/pymdmix/examples/md_tools/apply_4fs_hmr.sh    # dt = 4 fs, iwrap = 0 y masa de H = 3.024 Da en todas las réplicas
+bash /ruta/a/pymdmix/examples/md_tools/run_replicas.sh     # una equilibración y producción de todas las réplicas
+GPUS="0 1" bash /ruta/a/pymdmix/examples/md_tools/run_replicas.sh   # réplicas 2..N en paralelo en dos GPU
+```
+
+`apply_4fs_hmr.sh` edita los `*.in` (dt 0.004, `ntwx` y `ntpr` 250, `nstlim` 250000 en `md` y `eq5`, 50000 en `eq1` a `eq4`) y reparte la masa del hidrógeno en la topología de la primera réplica con parmed. Esa topología se copia a las demás, que parten del mismo sistema solvatado. Guarda copias `*.parm7.sin_hmr` y es idempotente.
+
+`run_replicas.sh` corre `COMMANDS.sh` completo en la primera réplica, copia su `eq5.rst7` a las demás y en ellas ejecuta solo la parte `md`. La minimización usa `mpirun -np 10 pmemd.MPI` (`AMBER_MIN_EXE` en `settings.cfg`; ajusta el número de procesos a tu equipo).
+
 ## 2. Caja de solvente con agua OPC
 
 Las cajas incluidas (`ETAWAT20` y las demás) están equilibradas con TIP3P. Para usar OPC hay que reconstruirlas y reequilibrarlas con ese modelo de agua. No hace falta reparametrizar los cosolventes: las cargas RESP y los parámetros GAFF del cosolvente no dependen del agua. Sí conviene validar densidad y agregación (sección 2.3).
