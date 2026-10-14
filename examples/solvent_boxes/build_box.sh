@@ -364,8 +364,8 @@ if [ -f npt.nc ]; then
 cat > 8_rdf.in << EOF
 parm mix.parm7
 trajin npt.nc $(( DISCARD_FR + 1 )) last
-rdf cc $RDFA $RDFB 0.1 12.0 out rdf_cosolv_cosolv.dat
-rdf cw $RDFA :WAT@O 0.1 12.0 out rdf_cosolv_wat.dat
+radial out rdf_cosolv_cosolv.dat 0.1 12.0 $RDFA $RDFB
+radial out rdf_cosolv_wat.dat 0.1 12.0 :WAT@O $RDFA
 EOF
 cpptraj -i 8_rdf.in > 8_rdf.log 2>&1 || { echo "ERROR etapa 8: cpptraj fallo, revisa 8_rdf.log"; tail -5 8_rdf.log; exit 1; }
 python - << 'PYEOF'
