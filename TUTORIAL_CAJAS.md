@@ -238,7 +238,19 @@ Las diferencias son de 0.02 e como máximo. El conformero gauche (0.09 kcal/mol 
 python boxcalc.py dilute BENZ --molar 0.25 --side 40
 ```
 
-### 9.6 Construir la caja de la sonda
+### 9.6 Concentración de las cajas de sondas
+
+La convención de 20 % v/v de las cajas de cosolventes miscibles (etanol, acetonitrilo, metanol, isopropanol) se obtiene de c = 0.20 · ρ · 1000 / M y no es aplicable a todas las sondas. Los criterios usados en `build_probe_boxes.sh` son:
+
+| Sonda | Concentración | Moléculas en 40 Å | Criterio |
+|---|---|---|---|
+| BNZ (benceno), IBN (isobutano) | 0.25 M | 10 | Sondas apolares con solubilidad muy baja en agua (benceno aprox. 0.02 M); una caja de 20 % v/v separaría en dos fases. 0.25 M es una concentración sobresaturada que permite muestrear sin agregación masiva. |
+| IMD (imidazol), ACD (acetaldehído) | 0.5 M | 19 | Sondas polares y solubles. |
+| GDM (guanidinio, +1), MPH (metilfosfato, -1) | 0.5 M | 19 | Sondas iónicas: no existe un líquido puro de referencia, por lo que el % v/v no está definido. Un equivalente de 20 % v/v (aprox. 2.5 a 3 M de sal) daría una fuerza iónica extrema y emparejamiento iónico con el contraión que distorsionaría el RDF. |
+
+Las sondas iónicas se construyen con el mismo número de contraiones (Cl- para GDM, Na+ para MPH, con los parámetros OPC de `leaprc.water.opc`), de modo que la caja es neutra. Se indican con la variable `IONS` de `build_box.sh` (por ejemplo `IONS="Cl-:19"`). Con 19 moléculas el muestreo es limitado (como en la caja de piridina, con solo 8), por lo que los primeros picos de los RDF cosolvente-cosolvente deben interpretarse con cautela.
+
+### 9.7 Construir la caja de la sonda
 
 Usa `NOMBRE.off`, el nombre de los objetos y las cuentas de `boxcalc.py` en las variables de `build_box.sh` (sección 4.1). Por ejemplo, para benceno a 0.25 M en 40 Å:
 
@@ -250,4 +262,4 @@ SOLV=BNZO UNIT=BNZOPC025 CFG_SRC= RDFA=":BNZ@C1" RDFB=":BNZ@C1" \
 bash /ruta/a/build_box.sh BNZ
 ```
 
-Como no hay `.config` de origen, el script no genera `BNZO.config`; hay que escribirlo (sección 6 y `examples/solvent_boxes/eta_opc.config`), con sondeos propios de la molécula (por ejemplo, `BNZ=BNZ@C1,C2,C3,C4,C5,C6` y tipo `Arom`).
+Para una sonda iónica añade `IONS="Cl-:19"` (o `Na+:19`) a las variables anteriores. Como no hay `.config` de origen, el script no genera `BNZO.config`; hay que escribirlo (sección 6 y `examples/solvent_boxes/eta_opc.config`), con sondeos propios de la molécula (por ejemplo, `BNZ=BNZ@C1,C2,C3,C4,C5,C6` y tipo `Arom`).

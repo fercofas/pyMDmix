@@ -56,6 +56,7 @@ NW0=${NW0:-$P_NW0}
 SIDE_EQ=${SIDE_EQ:-$P_SIDE}        # side of the original equilibrated box (A)
 SOLV=${SOLV:-$P_SOLV}              # solvent name in pyMDMix
 UNIT=${UNIT:-$P_UNIT}              # box unit name in the final .off
+IONS=${IONS:-}                    # counterions "Cl-:19" or "Na+:19" (original box), taken from leaprc.water.opc
 PARMS=${PARMS:-$P_PARMS}          # PARMSET objects in the .off (e.g. ANTparms); empty if none
 RDFA=${RDFA:-$P_RDFA}
 RDFB=${RDFB:-$P_RDFB}
@@ -84,6 +85,8 @@ NSTEPS=$(( NPT_NS * 500000 ))     # dt = 2 fs
 NFRAMES=$(( NPT_NS * 100 ))       # one frame every 10 ps
 DISCARD_FR=$(( DISCARD_NS * 100 ))
 RESLIST=$(for c in $COMP; do echo -n "${c%%:*} "; done)
+# Counterion names without the sign (file names); the unit names are Cl- / Na+ in leaprc.water.opc
+ION_SAVE=$(for c in $IONS; do i=${c%%:*}; echo "savePdb $i ion_${i%[-+]}.pdb"; done)
 SRC_LINES=$(for f in $FFS; do echo "source $f"; done)
 OBJLIST="$RESLIST $PARMS"
 LOAD_LIBS=$(for r in $OBJLIST; do echo "loadOff $r.lib"; done)
@@ -131,6 +134,7 @@ cat > 2_wat.leap << EOF
 $SRC_LINES
 source leaprc.water.opc
 savePdb WAT wat_opc.pdb
+$ION_SAVE
 quit
 EOF
 tleap -f 2_wat.leap > 2_wat.log || { echo "ERROR: tleap fallo con 2_wat.leap, revisa 2_wat.log"; tail -5 2_wat.log; exit 1; }
@@ -151,6 +155,10 @@ PLO=1.0
 PHI=$(awk "BEGIN{printf \"%.2f\", $SIDE0-1.0}")
 PACK_BLOCKS=$(for c in $COMP; do
   printf 'structure %s.pdb\n  number %d\n  inside box %s %s %s %s %s %s\nend structure\n\n' "${c%%:*}" $(( ${c##*:} * R3 )) $PLO $PLO $PLO $PHI $PHI $PHI
+done
+for c in $IONS; do
+  i=${c%%:*}
+  printf 'structure ion_%s.pdb\n  number %d\n  inside box %s %s %s %s %s %s\nend structure\n\n' "${i%[-+]}" $(( ${c##*:} * R3 )) $PLO $PLO $PLO $PHI $PHI $PHI
 done)
 cat > mix.inp << EOF
 tolerance 2.0
