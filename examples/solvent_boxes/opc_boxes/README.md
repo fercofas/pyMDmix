@@ -11,6 +11,7 @@ Cada caja se construyó con `build_box.sh`, se equilibró 10 ns en NPT a 300 K y
 | ISO5O | isopropanol 5 % | 32 ISO + 2480 WAT | 0.9890 | 42.77 |
 | MAMO | acetamida | 144 MAM + 1672 WAT | 1.0185 | 39.79 |
 | IONO | acetato + metilamonio | 96 CN3 + 96 COO + 2520 WAT | 1.0472 | 44.12 |
+| PYR1O | piridina (~0.13 M) | 8 PYR + 3504 WAT | 0.9957 | 47.38 |
 
 Registro en la base de datos de solventes (entorno `pymdmix3` activo):
 
