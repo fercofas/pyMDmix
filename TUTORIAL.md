@@ -58,7 +58,7 @@ bash /ruta/a/pymdmix/examples/md_tools/run_replicas.sh     # una equilibración 
 GPUS="0 1" bash /ruta/a/pymdmix/examples/md_tools/run_replicas.sh   # réplicas 2..N en paralelo en dos GPU
 ```
 
-`apply_4fs_hmr.sh` edita los `*.in` (dt 0.004, `ntwx` y `ntpr` 250, `nstlim` 250000 en `md` y `eq5`, 50000 en `eq1` a `eq4`) y reparte la masa del hidrógeno en la topología de la primera réplica con parmed. Esa topología se copia a las demás, que parten del mismo sistema solvatado. Guarda copias `*.parm7.sin_hmr` y es idempotente.
+`apply_4fs_hmr.sh` edita los `*.in` (dt 0.004, `ntwx` y `ntpr` 250, `nstlim` 250000 en `md` y `eq5`, 50000 en `eq1` a `eq4`) y reparte la masa del hidrógeno en la topología de la primera réplica con parmed. Esa topología se copia a las demás, que parten del mismo sistema solvatado. Guarda copias `*.parm7.no_hmr` y es idempotente.
 
 `run_replicas.sh` corre `COMMANDS.sh` completo en la primera réplica, copia su `eq5.rst7` a las demás y en ellas ejecuta solo la parte `md`. La minimización usa `mpirun -np 10 pmemd.MPI` (`AMBER_MIN_EXE` en `settings.cfg`; ajusta el número de procesos a tu equipo).
 

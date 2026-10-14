@@ -1,27 +1,27 @@
 #!/bin/bash
 # =============================================================================
-# Construccion de cajas COSOLVENTE / AGUA OPC para pyMDMix
+# Building COSOLVENT / OPC WATER boxes for pyMDMix
 #
-# Uso (desde una carpeta de trabajo VACIA por solvente, con pymdmix3 y AMBER activados):
+# Usage (from an EMPTY working folder per solvent, with pymdmix3 and AMBER active):
 #   mkdir ANT && cd ANT
-#   bash /ruta/a/build_box.sh ANT        # corre todas las etapas
-#   bash /ruta/a/build_box.sh ANT 5      # reanuda desde la etapa 5
+#   bash /path/to/build_box.sh ANT        # runs all stages
+#   bash /path/to/build_box.sh ANT 5      # resumes from stage 5
 #
-# Cosolventes con perfil incluido: ETA ANT MAM ISO ISO5 MOH PYR1 ION
-# (composicion y lado tomados de las cajas TIP3P de pyMDMix/data/solventlib).
-# Para otro cosolvente (con parametros ya disponibles en un .off) define
-# COSOLV, SRC_OFF, COMP, NW0, SIDE_EQ, SOLV y UNIT por variables de entorno;
-# boxcalc.py calcula COMP y NW0 para un % v/v dado.
+# Cosolvents with a built-in profile: ETA ANT MAM ISO ISO5 MOH PYR1 ION
+# (composition and side taken from the TIP3P boxes in pyMDMix/data/solventlib).
+# For another cosolvent (with parameters already available in an .off) define
+# COSOLV, SRC_OFF, COMP, NW0, SIDE_EQ, SOLV and UNIT as environment variables;
+# boxcalc.py computes COMP and NW0 for a given % v/v.
 #
-# Etapas:
-#   1  Extraer los cosolventes (coordenadas y parametros) del .off TIP3P
-#   2  Obtener una molecula de agua OPC (con sitio virtual EPW)
-#   3  Empaquetar con packmol y generar parm7/rst7 con tleap
-#   4  Minimizar y calentar
-#   5  Equilibrar en NPT (GPU)
-#   6  Analizar densidad y caja, elegir el cuadro representativo
-#   7  Construir el .off final con tleap
-#   8  Escribir el .config del solvente y el RDF de agregacion
+# Stages:
+#   1  Extract the cosolvents (coordinates and parameters) from the TIP3P .off
+#   2  Get one OPC water molecule (with the EPW virtual site)
+#   3  Pack with packmol and generate parm7/rst7 with tleap
+#   4  Minimize and heat
+#   5  Equilibrate in NPT (GPU)
+#   6  Analyze density and box, choose the representative frame
+#   7  Build the final .off with tleap
+#   8  Write the solvent .config and the aggregation RDF
 # =============================================================================
 set -euo pipefail
 
@@ -29,10 +29,10 @@ COSOLV=${1:-}
 START=${2:-1}
 [ -n "$COSOLV" ] || { echo "Uso: bash build_box.sh COSOLV [etapa_inicial]   (ETA ANT MAM ISO ISO5 MOH PYR1 ION)"; exit 1; }
 
-# ------------------------------ perfiles --------------------------------------
-# SRC: .off TIP3P de origen | CFG: .config original | COMP: residuos cosolvente:numero (caja original)
-# NW0: aguas de la caja original | SIDE_EQ: lado equilibrado (A) de la caja original
-# PARMS: objetos PARMSET (parametros propios del cosolvente) guardados en el .off | SOLV: nombre del solvente nuevo | UNIT: unidad caja nueva | RDFA/RDFB: mascaras para el RDF cosolvente-cosolvente
+# ------------------------------ profiles --------------------------------------
+# SRC: source TIP3P .off | CFG: original .config | COMP: cosolvent residues:number (original box)
+# NW0: waters in the original box | SIDE_EQ: equilibrated side (A) of the original box
+# PARMS: PARMSET objects (cosolvent-specific parameters) stored in the .off | SOLV: new solvent name | UNIT: new box unit | RDFA/RDFB: masks for the cosolvent-cosolvent RDF
 case "$COSOLV" in
   ETA)  P_SRC=ETAWAT20.off;    P_CFG=eta.config;  P_COMP="ETA:17";           P_NW0=209; P_SIDE=19.99; P_SOLV=ETAO;  P_UNIT=ETAOPC20; P_RDFA=":ETA@O1"; P_RDFB=":ETA@O1";;
   ANT)  P_PARMS=ANTparms; P_SRC=ANTWAT20.off;    P_CFG=ant.config;  P_COMP="ANT:17";           P_NW0=209; P_SIDE=19.86; P_SOLV=ANTO;  P_UNIT=ANTOPC20; P_RDFA=":ANT@N1"; P_RDFB=":ANT@N1";;
@@ -46,49 +46,49 @@ case "$COSOLV" in
 esac
 P_PARMS=${P_PARMS:-}
 
-# ---------------------------- parametros -------------------------------------
-# Cualquier variable puede sobrescribirse desde el entorno (por ejemplo REP=3 NPT_NS=20).
+# ---------------------------- parameters -------------------------------------
+# Any variable can be overridden from the environment (for example REP=3 NPT_NS=20).
 SRC_DIR=${SRC_DIR:-$(python -c "import os, pyMDMix; print(os.path.join(os.path.dirname(pyMDMix.__file__), 'data', 'solventlib'))" 2>/dev/null || echo "")}
 SRC_OFF=${SRC_OFF:-$SRC_DIR/$P_SRC}
 CFG_SRC=${CFG_SRC:-$SRC_DIR/$P_CFG}
-COMP=${COMP:-$P_COMP}              # "RES:n RES:n" para la caja ORIGINAL (sin replicar)
+COMP=${COMP:-$P_COMP}              # "RES:n RES:n" for the ORIGINAL (unreplicated) box
 NW0=${NW0:-$P_NW0}
-SIDE_EQ=${SIDE_EQ:-$P_SIDE}        # lado de la caja original equilibrada (A)
-SOLV=${SOLV:-$P_SOLV}              # nombre del solvente en pyMDMix
-UNIT=${UNIT:-$P_UNIT}              # nombre de la unidad caja en el .off final
-PARMS=${PARMS:-$P_PARMS}          # objetos PARMSET del .off (p. ej. ANTparms); vacio si no hay
+SIDE_EQ=${SIDE_EQ:-$P_SIDE}        # side of the original equilibrated box (A)
+SOLV=${SOLV:-$P_SOLV}              # solvent name in pyMDMix
+UNIT=${UNIT:-$P_UNIT}              # box unit name in the final .off
+PARMS=${PARMS:-$P_PARMS}          # PARMSET objects in the .off (e.g. ANTparms); empty if none
 RDFA=${RDFA:-$P_RDFA}
 RDFB=${RDFB:-$P_RDFB}
 for v in SRC_OFF COMP NW0 SIDE_EQ SOLV UNIT; do
   [ -n "${!v}" ] || { echo "ERROR: perfil '$COSOLV' desconocido o falta $v. Define $v en el entorno."; exit 1; }
 done
-# Un lado minimo de ~36 A para el corte de 9 A (pmemd exige radio de esfera > corte + 2 A y
-# pmemd.cuda rechaza cajas pequenas). Se replica la caja original REP veces por lado; la
-# composicion no cambia.
+# A minimum side of ~36 A for the 9 A cutoff (pmemd requires sphere radius > cutoff + 2 A and
+# pmemd.cuda rejects small boxes). The original box is replicated REP times per side; the
+# composition does not change.
 REP=${REP:-$(awk "BEGIN{r=int(36.0/$SIDE_EQ); if (r*$SIDE_EQ<36.0) r++; if (r<1) r=1; print r}")}
 R3=$(( REP * REP * REP ))
 NWAT=$(( NW0 * R3 ))
-SIDE0=${SIDE0:-$(awk "BEGIN{printf \"%.2f\", $SIDE_EQ*1.05*$REP}")}   # caja inicial algo mas holgada
+SIDE0=${SIDE0:-$(awk "BEGIN{printf \"%.2f\", $SIDE_EQ*1.05*$REP}")}   # slightly looser initial box
 TEMP=${TEMP:-300.0}               # K
-NPT_NS=${NPT_NS:-10}              # duracion de la fase NPT (ns)
-DISCARD_NS=${DISCARD_NS:-2}       # ns de NPT que se descartan en el analisis
-# Campos de fuerza del soluto: ff19SB (se diseno para usarse con OPC) y gaff (cosolventes organicos)
+NPT_NS=${NPT_NS:-10}              # duration of the NPT phase (ns)
+DISCARD_NS=${DISCARD_NS:-2}       # ns of NPT discarded in the analysis
+# Solute force fields: ff19SB (designed to be used with OPC) and gaff2 (organic cosolvents)
 FFS=${FFS:-"leaprc.protein.ff19SB leaprc.gaff2"}
 PMEMD_CPU=${PMEMD_CPU:-pmemd}
-# Calentamiento y NPT en GPU. Si la caja es pequena (REP=1) use CPU: NPT_CMD=pmemd HEAT_CMD=pmemd
+# Heating and NPT on GPU. If the box is small (REP=1) use CPU: NPT_CMD=pmemd HEAT_CMD=pmemd
 PMEMD_GPU=${PMEMD_GPU:-pmemd.cuda}
 HEAT_CMD=${HEAT_CMD:-$PMEMD_GPU}
 NPT_CMD=${NPT_CMD:-$PMEMD_GPU}
 
 NSTEPS=$(( NPT_NS * 500000 ))     # dt = 2 fs
-NFRAMES=$(( NPT_NS * 100 ))       # un cuadro cada 10 ps
+NFRAMES=$(( NPT_NS * 100 ))       # one frame every 10 ps
 DISCARD_FR=$(( DISCARD_NS * 100 ))
 RESLIST=$(for c in $COMP; do echo -n "${c%%:*} "; done)
 SRC_LINES=$(for f in $FFS; do echo "source $f"; done)
 OBJLIST="$RESLIST $PARMS"
 LOAD_LIBS=$(for r in $OBJLIST; do echo "loadOff $r.lib"; done)
 
-# ---------------------------- verificaciones ---------------------------------
+# ---------------------------- checks -----------------------------------------
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: no se encuentra '$1' en el PATH"; exit 1; }; }
 need tleap; need cpptraj; need packmol; need python
 command -v "$PMEMD_CPU" >/dev/null 2>&1 || PMEMD_CPU=sander
@@ -104,7 +104,7 @@ echo ">> $COSOLV | Etapa inicial: $START | REP=$REP | ${COMPTXT}$NWAT WAT | caja
 
 run_stage() { [ "$START" -le "$1" ]; }
 
-# ------------------------------ ETAPA 1 --------------------------------------
+# ------------------------------ STAGE 1 --------------------------------------
 if run_stage 1; then
 echo "== Etapa 1: extraer cosolvente(s) [$RESLIST] y parametros [${PARMS:-ninguno}] de $SRC_OFF"
 {
@@ -124,7 +124,7 @@ for r in $OBJLIST; do
 done
 fi
 
-# ------------------------------ ETAPA 2 --------------------------------------
+# ------------------------------ STAGE 2 --------------------------------------
 if run_stage 2; then
 echo "== Etapa 2: molecula de agua OPC"
 cat > 2_wat.leap << EOF
@@ -142,11 +142,11 @@ echo "   residuo del agua: '$WRES' | atomos: $WATOMS"
 echo "$WATOMS" | grep -q "EPW" || { echo "ERROR: no aparece el sitio virtual EPW en wat_opc.pdb"; exit 1; }
 fi
 
-# ------------------------------ ETAPA 3 --------------------------------------
+# ------------------------------ STAGE 3 --------------------------------------
 if run_stage 3; then
 echo "== Etapa 3: empaquetar y construir topologia"
-# Margen de 1 A en cada cara: packmol no conoce la periodicidad y, sin margen, dos moleculas
-# pegadas a caras opuestas quedan casi superpuestas al aplicar la caja periodica.
+# 1 A margin on each face: packmol does not know about periodicity and, without a margin, two molecules
+# placed on opposite faces end up almost overlapping once the periodic box is applied.
 PLO=1.0
 PHI=$(awk "BEGIN{printf \"%.2f\", $SIDE0-1.0}")
 PACK_BLOCKS=$(for c in $COMP; do
@@ -176,7 +176,7 @@ xyz, res = [], []
 for l in open(pdb):
     if l.startswith(('ATOM', 'HETATM')):
         xyz.append([float(l[30:38]), float(l[38:46]), float(l[46:54])])
-        res.append(l[22:27])            # numero de residuo + codigo de insercion
+        res.append(l[22:27])            # residue number + insertion code
 xyz = np.array(xyz) % side
 res = np.array([hash(r) for r in res])
 pairs = cKDTree(xyz, boxsize=side).query_pairs(1.5, output_type='ndarray')
@@ -207,8 +207,8 @@ tleap -f 3_build.leap > 3_build.log || { echo "ERROR: tleap fallo con 3_build.le
 [ -s mix.parm7 ] && [ -s mix.rst7 ] || { echo "ERROR etapa 3: revisa 3_build.log"; exit 1; }
 echo "   carga total reportada por tleap:"; grep -i "total unperturbed charge\|Total perturbed charge" 3_build.log || true
 grep -E "Errors = [1-9]|Fatal Error|FATAL" 3_build.log && { echo "AVISO: tleap reporto errores, revisa 3_build.log"; } || true
-# Parametros de torsion antiguos (PARMSET sin SCEE/SCNB) dejan SCEE/SCNB sin inicializar (valores basura o 0) en el
-# parm7 y dan 1-4 VDW = -Infinity. Se detectan los fuera de rango y se fijan a los valores de Amber (1.2 / 2.0).
+# Old torsion parameters (PARMSET without SCEE/SCNB) leave SCEE/SCNB uninitialized (garbage or 0) in the
+# parm7 and give 1-4 VDW = -Infinity. Out-of-range values are detected and set to the Amber values (1.2 / 2.0).
 python - << 'PYEOF'
 import parmed
 p = parmed.load_file('mix.parm7', 'mix.rst7')
@@ -223,7 +223,7 @@ if n:
 PYEOF
 fi
 
-# ------------------------------ ETAPA 4 --------------------------------------
+# ------------------------------ STAGE 4 --------------------------------------
 if run_stage 4; then
 echo "== Etapa 4: minimizacion y calentamiento"
 cat > min.in << EOF
@@ -249,7 +249,7 @@ $PMEMD_CPU -O -i min.in  -o min.out  -p mix.parm7 -c mix.rst7  -r min.rst7
 $HEAT_CMD -O -i heat.in -o heat.out -p mix.parm7 -c min.rst7  -r heat.rst7
 fi
 
-# ------------------------------ ETAPA 5 --------------------------------------
+# ------------------------------ STAGE 5 --------------------------------------
 if run_stage 5; then
 echo "== Etapa 5: NPT de ${NPT_NS} ns con: $NPT_CMD"
 cat > npt.in << EOF
@@ -267,7 +267,7 @@ EOF
 $NPT_CMD -O -i npt.in -o npt.out -p mix.parm7 -c heat.rst7 -r npt.rst7 -x npt.nc
 fi
 
-# ------------------------------ ETAPA 6 --------------------------------------
+# ------------------------------ STAGE 6 --------------------------------------
 if run_stage 6; then
 echo "== Etapa 6: analisis de densidad y caja"
 cat > analyze_density.py << 'EOF'
@@ -277,7 +277,7 @@ from netCDF4 import Dataset
 
 parm, nc, discard = sys.argv[1], sys.argv[2], int(sys.argv[3])
 
-# masa total (uma) desde la seccion MASS del parm7 (EPW tiene masa 0)
+# total mass (amu) from the MASS section of the parm7 (EPW has zero mass)
 lines = open(parm).read().split('\n')
 i = next(k for k, l in enumerate(lines) if l.startswith('%FLAG MASS'))
 masses = []
@@ -319,7 +319,7 @@ EOF
 python analyze_density.py mix.parm7 npt.nc "$DISCARD_FR" | tee 6_analysis.log
 fi
 
-# ------------------------------ ETAPA 7 --------------------------------------
+# ------------------------------ STAGE 7 --------------------------------------
 if run_stage 7; then
 echo "== Etapa 7: construir el .off final ($UNIT)"
 read FRAME BA BB BC < best_frame.txt
@@ -350,7 +350,7 @@ echo
 echo "LISTO: $UNIT.off. Caja: $BA x $BB x $BC A."
 fi
 
-# ------------------------------ ETAPA 8 --------------------------------------
+# ------------------------------ STAGE 8 --------------------------------------
 if run_stage 8; then
 echo "== Etapa 8: archivo .config del solvente y RDF de agregacion"
 if [ -f "$CFG_SRC" ]; then

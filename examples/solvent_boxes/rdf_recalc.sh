@@ -1,6 +1,6 @@
 #!/bin/bash
-# Recalcula los RDF de agregacion de una caja ya construida.
-# Uso (desde la carpeta de la caja): bash rdf_recalc.sh ":ANT@N1" ":ANT@N1" [primer_frame]
+# Recomputes the aggregation RDFs of an already built box.
+# Usage (from the box folder): bash rdf_recalc.sh ":ANT@N1" ":ANT@N1" [first_frame]
 A=${1:?mascara A}; B=${2:-$1}; F=${3:-201}
 cat > rdf_recalc.in << IN
 parm mix.parm7

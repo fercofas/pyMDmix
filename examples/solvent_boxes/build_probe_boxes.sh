@@ -1,19 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# Construye en serie las cajas OPC de las sondas parametrizadas con run_probes.sh.
-# Concentraciones: BNZ e IBN 0.25 M (apolares, se agregan a concentracion alta);
-# IMD y ACD 0.5 M. Cajas de 40 A (cuentas de: python boxcalc.py dilute COSOLV --molar M --side 40).
+# Builds in series the OPC boxes of the probes parametrized with run_probes.sh.
+# Concentrations: BNZ and IBN 0.25 M (apolar, they aggregate at high concentration);
+# IMD and ACD 0.5 M. 40 A boxes (numbers from: python boxcalc.py dilute COSOLV --molar M --side 40).
 #
-# Uso (ragnarok, entorno pymdmix3 y AmberTools activos):
+# Usage (ragnarok, pymdmix3 environment and AmberTools active):
 #   cd /mnt/data_ubuntu/new_boxes && mkdir -p probe_boxes && cd probe_boxes
-#   nohup bash /ruta/a/build_probe_boxes.sh > build_probe_boxes.log 2>&1 &
-# Variables: PROBES_DIR (carpeta de run_probes.sh), PROBES="BNZ IBN" para un subconjunto.
+#   nohup bash /path/to/build_probe_boxes.sh > build_probe_boxes.log 2>&1 &
+# Variables: PROBES_DIR (run_probes.sh folder), PROBES="BNZ IBN" for a subset.
 # =============================================================================
 HERE=$(dirname "$(readlink -f "$0")")
 B=$HERE/build_box.sh
 PROBES_DIR=${PROBES_DIR:-/mnt/data_ubuntu/new_boxes/probes}
 
-# NOMBRE|COMP|NW0|LADO|SOLVENTE|MASCARA_RDF
+# NAME|COMP|NW0|SIDE|SOLVENT|RDF_MASK
 read -r -d '' TABLE << 'TAB'
 BNZ|BNZ:10|2091|40|BNZO|:BNZ@C1
 IBN|IBN:10|2082|40|IBNO|:IBN@C1

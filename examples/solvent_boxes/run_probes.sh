@@ -1,19 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# Parametriza en serie las sondas nuevas con make_probe.sh (ORCA + Multiwfn + Amber).
+# Parametrizes the new probes in series with make_probe.sh (ORCA + Multiwfn + Amber).
 #
-# Uso (en ragnarok, con AmberTools activo y python con RDKit o obabel disponible):
+# Usage (on ragnarok, with AmberTools active and python with RDKit or obabel available):
 #   mkdir -p /mnt/data_ubuntu/new_boxes/probes && cd /mnt/data_ubuntu/new_boxes/probes
-#   nohup bash /ruta/a/run_probes.sh > run_probes.log 2>&1 &
+#   nohup bash /path/to/run_probes.sh > run_probes.log 2>&1 &
 #
-# Cada sonda queda en su carpeta NOMBRE/ con NOMBRE.off listo para build_box.sh.
-# Para elegir un subconjunto:  PROBES="BNZ IBN" bash run_probes.sh
-# Un fallo en una sonda no detiene a las demas; al final se imprime un resumen.
+# Each probe ends up in its own NAME/ folder with NAME.off ready for build_box.sh.
+# To choose a subset:  PROBES="BNZ IBN" bash run_probes.sh
+# A failure in one probe does not stop the others; a summary is printed at the end.
 # =============================================================================
 MP=$(dirname "$(readlink -f "$0")")/make_probe.sh
 [ -f "$MP" ] || { echo "ERROR: no encuentro make_probe.sh junto a este script"; exit 1; }
 
-# NOMBRE  SMILES  CARGA  MULT
+# NAME  SMILES  CHARGE  MULT
 read -r -d '' TABLE << 'TAB'
 BNZ|c1ccccc1|0|1
 IBN|CC(C)C|0|1

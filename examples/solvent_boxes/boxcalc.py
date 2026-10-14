@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
 """
-boxcalc.py: calculadora de composicion para cajas de solvente mixto.
+boxcalc.py: composition calculator for mixed-solvent boxes.
 
-Reemplaza la hoja de calculo molecule_calculator.ods. Todas las cuentas usan
-volumenes moleculares de los componentes puros (V = M / (rho * NA)), igual que
-la hoja. El volumen real de la mezcla difiere unos pocos por ciento (volumen de
-exceso); por eso la caja se equilibra despues en NPT y la densidad final se
-valida contra el experimento.
+Replaces the molecule_calculator.ods spreadsheet. All calculations use the
+molecular volumes of the pure components (V = M / (rho * NA)), as the
+spreadsheet did. The real volume of the mixture differs by a few percent (excess
+volume); that is why the box is later equilibrated in NPT and the final density
+is validated against experiment.
 
-Subcomandos
+Subcommands
 -----------
-  table                              lista de cosolventes (densidad, masa molar)
-  pure   COSOLV --side 23            moleculas en una caja cubica del cosolvente puro
-  mix    COSOLV --vv 20 --side 20    moleculas de cosolvente y agua para un % v/v
+  table                              list of cosolvents (density, molar mass)
+  pure   COSOLV --side 23            molecules in a cubic box of the pure cosolvent
+  mix    COSOLV --vv 20 --side 20    cosolvent and water molecules for a given % v/v
   check  COSOLV --nco 17 --nwat 209 --side 20
-                                     concentracion real de una composicion dada
+                                     actual concentration of a given composition
   molar  COSOLV --molarity 7 --volume 0.1
-                                     gramos y mililitros para una solucion de molaridad dada
+                                     grams and milliliters for a solution of a given molarity
   dilute COSOLV --molar 0.25 --side 40
-                                     moleculas para una concentracion molar baja (sondas apolares)
-  library                            concentracion real de las cajas incluidas en pyMDMix
+                                     molecules for a low molar concentration (apolar probes)
+  library                            actual concentration of the boxes included in pyMDMix
 
-Ejemplos
+Examples
 --------
   python boxcalc.py mix ETA --vv 20 --side 20
   python boxcalc.py mix ETA --vv 20 --side 21 --rep 2
@@ -33,14 +33,14 @@ import math
 import sys
 
 NA = 6.02214076e23          # 1/mol
-RHO_WAT = 1.0               # g/mL (la hoja usa 1.0 y 18.02 g/mol)
+RHO_WAT = 1.0               # g/mL (the spreadsheet uses 1.0 and 18.02 g/mol)
 MW_WAT = 18.02              # g/mol
-V_WAT = MW_WAT / (RHO_WAT * NA) * 1e24   # A^3 por molecula de agua (29.92)
+V_WAT = MW_WAT / (RHO_WAT * NA) * 1e24   # A^3 per water molecule (29.92)
 
-# nombre corto: (nombre, densidad g/mL, masa molar g/mol, origen)
-# "hoja" = valores de molecule_calculator.ods. "lit" = valores de la literatura
-# agregados para los cosolventes de las cajas incluidas; confirma con tu
-# proveedor antes de usarlos en un trabajo publicado.
+# short code: (name, density g/mL, molar mass g/mol, source)
+# "hoja" = values from molecule_calculator.ods. "lit" = literature values
+# added for the cosolvents of the included boxes; confirm with your
+# supplier before using them in published work.
 COSOLVENTS = {
     'ETA':  ('Ethanol',                        0.789, 46.07,   'hoja'),
     'TFE':  ('Trifluoroethanol',               1.39,  100.04,  'hoja'),
@@ -64,7 +64,7 @@ COSOLVENTS = {
     'EMAL': ('Ethyl maltol',                   1.1624, 140.1366, 'hoja'),
     'ABUT': ('3-amino-1-butanol',              0.927, 89.136,  'hoja'),
     'UREA': ('Urea',                           1.32,  60.06,   'hoja'),
-    # cosolventes de las cajas incluidas en pyMDMix (valores de literatura)
+    # cosolvents of the boxes included in pyMDMix (literature values)
     'MOH':  ('Methanol',                       0.792, 32.04,   'lit'),
     'ISO':  ('Isopropanol',                    0.786, 60.10,   'lit'),
     'ANT':  ('Acetonitrile',                   0.786, 41.05,   'lit'),
@@ -74,8 +74,8 @@ COSOLVENTS = {
     'ACD':  ('Acetaldehyde',                   0.784, 44.05,   'lit'),
 }
 
-# Cajas incluidas en pyMDMix/data/solventlib: (cosolvente, n cosolvente, n agua, lado A)
-# leidas de los .off. ION (acetato de amonio, cargado) no se trata como cosolvente neutro.
+# Boxes included in pyMDMix/data/solventlib: (cosolvent, n cosolvent, n water, side A)
+# read from the .off files. ION (ammonium acetate, charged) is not treated as a neutral cosolvent.
 LIBRARY = {
     'ETAWAT20':  ('ETA', 17, 209, 19.990),
     'ANTWAT20':  ('ANT', 17, 209, 19.861),
@@ -95,23 +95,23 @@ def get(code):
 
 
 def v_mol(rho, mw):
-    """Volumen molecular (A^3) de un liquido puro."""
+    """Molecular volume (A^3) of a pure liquid."""
     return mw / (rho * NA) * 1e24
 
 
 def composition(nco, nwat, side, rho, mw):
-    """Concentraciones de una caja con nco cosolventes y nwat aguas."""
+    """Concentrations of a box with nco cosolvents and nwat waters."""
     vbox = side ** 3
     mass_co = nco * mw / NA
     mass_w = nwat * MW_WAT / NA
     vco = nco * v_mol(rho, mw)
     vw = nwat * V_WAT
     return {
-        'molar': nco / (NA * vbox * 1e-27),                 # mol/L de caja
-        'x_co': nco / float(nco + nwat),                    # fraccion molar
-        'vv_ideal': 100.0 * vco / (vco + vw),               # % v/v, volumenes puros
+        'molar': nco / (NA * vbox * 1e-27),                 # mol/L of box
+        'x_co': nco / float(nco + nwat),                    # mole fraction
+        'vv_ideal': 100.0 * vco / (vco + vw),               # % v/v, pure volumes
         'ww': 100.0 * mass_co / (mass_co + mass_w),         # % p/p
-        'dens_ini': (mass_co + mass_w) * 1e24 / vbox,       # g/mL en la caja inicial
+        'dens_ini': (mass_co + mass_w) * 1e24 / vbox,       # g/mL in the initial box
         'vbox': vbox,
     }
 
@@ -172,7 +172,7 @@ def cmd_molar(a):
 
 
 def cmd_dilute(a):
-    """Caja con un cosolvente a concentracion molar baja: n = M * V; el resto es agua."""
+    """Box with one cosolvent at low molar concentration: n = M * V; the rest is water."""
     _, rho, mw, _ = get(a.cosolv)
     side = a.side * a.rep
     vbox = side ** 3
@@ -205,9 +205,9 @@ def main():
     s.set_defaults(f=cmd_pure)
 
     s = sub.add_parser('mix'); s.add_argument('cosolv')
-    s.add_argument('--vv', type=float, required=True, help='porcentaje v/v del cosolvente')
-    s.add_argument('--side', type=float, required=True, help='lado de la caja base (A)')
-    s.add_argument('--rep', type=int, default=1, help='replicas por lado (lado final = side*rep)')
+    s.add_argument('--vv', type=float, required=True, help='cosolvent % v/v')
+    s.add_argument('--side', type=float, required=True, help='side of the base box (A)')
+    s.add_argument('--rep', type=int, default=1, help='replicas per side (final side = side*rep)')
     s.set_defaults(f=cmd_mix)
 
     s = sub.add_parser('check'); s.add_argument('cosolv')
@@ -216,13 +216,13 @@ def main():
     s.set_defaults(f=cmd_check)
 
     s = sub.add_parser('molar'); s.add_argument('cosolv', nargs='?')
-    s.add_argument('--molarity', type=float, required=True); s.add_argument('--volume', type=float, required=True, help='litros')
+    s.add_argument('--molarity', type=float, required=True); s.add_argument('--volume', type=float, required=True, help='liters')
     s.add_argument('--density', type=float); s.add_argument('--mw', type=float)
     s.set_defaults(f=cmd_molar)
 
     s = sub.add_parser('dilute'); s.add_argument('cosolv')
-    s.add_argument('--molar', type=float, required=True, help='concentracion deseada (mol/L)')
-    s.add_argument('--side', type=float, required=True, help='lado de la caja (A)')
+    s.add_argument('--molar', type=float, required=True, help='desired concentration (mol/L)')
+    s.add_argument('--side', type=float, required=True, help='box side (A)')
     s.add_argument('--rep', type=int, default=1)
     s.set_defaults(f=cmd_dilute)
 

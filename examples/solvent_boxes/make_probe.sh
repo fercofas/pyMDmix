@@ -1,29 +1,29 @@
 #!/bin/bash
 # =============================================================================
-# Parametrizacion de una sonda (cosolvente) para pyMDMix: cargas RESP con ORCA y Multiwfn
+# Parametrization of a probe (cosolvent) for pyMDMix: RESP charges with ORCA and Multiwfn
 #
-# Uso:
-#   bash make_probe.sh NOMBRE ENTRADA [CARGA] [MULT]
-#     NOMBRE  nombre del residuo, 3 letras mayusculas (p. ej. BNZ)
-#     ENTRADA archivo .xyz con una estructura 3D inicial, o un SMILES entre comillas
-#             (el SMILES se convierte con RDKit o, si no esta, con obabel)
-#     CARGA   carga neta (por defecto 0)       MULT  multiplicidad de espin (por defecto 1)
+# Usage:
+#   bash make_probe.sh NAME INPUT [CHARGE] [MULT]
+#     NAME    residue name, 3 uppercase letters (e.g. BNZ)
+#     INPUT   .xyz file with an initial 3D structure, or a quoted SMILES
+#             (the SMILES is converted with RDKit or, if missing, with obabel)
+#     CHARGE  net charge (default 0)           MULT  spin multiplicity (default 1)
 #
-# Salida (en la carpeta NOMBRE/):
-#   NOMBRE.off   unidad NOMBRE + parametros nuevos (objeto NOMBREparms), listo para build_box.sh
-#   NOMBRE.mol2, NOMBRE.frcmod, NOMBRE.charges, NOMBRE_opt.xyz
+# Output (in the NAME/ folder):
+#   NAME.off     NAME unit + new parameters (NAMEparms object), ready for build_box.sh
+#   NAME.mol2, NAME.frcmod, NAME.charges, NAME_opt.xyz
 #
-# Protocolo: optimizacion HF/6-31G*, ESP del mismo nivel, ajuste RESP de dos etapas
-# (Multiwfn, equivalencias por conectividad), tipos GAFF2 (antechamber) y frcmod (parmchk2).
-# Un solo conformero: en moleculas flexibles (OH, rotores) la carga depende del conformero;
-# ver TUTORIAL_CAJAS.md, seccion "Sondas nuevas".
+# Protocol: HF/6-31G* optimization, ESP at the same level, two-stage RESP fit
+# (Multiwfn, equivalence by connectivity), GAFF2 atom types (antechamber) and frcmod (parmchk2).
+# Single conformer: in flexible molecules (OH, rotors) the charges depend on the conformer;
+# see TUTORIAL_CAJAS.md, section "Sondas nuevas".
 #
-# Variables (con valores por defecto de ragnarok):
-#   ORCA_HOME  carpeta de ORCA 6.x          MULTIWFN_HOME  carpeta con el ejecutable Multiwfn
-#   ATYPE=gaff2 tipo atomico                   NPROCS=1      nucleos para ORCA (usa ruta completa)
-#   QM_ONLY=1  se detiene tras calcular las cargas (para correr la parte cuantica en otra maquina)
-# Reanudacion: si NOMBRE/NOMBRE_opt.xyz y NOMBRE/NOMBRE.charges ya existen, se salta la parte
-# cuantica y solo se hace la parte de Amber.
+# Variables (defaults are those of ragnarok):
+#   ORCA_HOME  ORCA 6.x folder              MULTIWFN_HOME  folder with the Multiwfn executable
+#   ATYPE=gaff2 atom type set                  NPROCS=1      cores for ORCA (uses the full path)
+#   QM_ONLY=1  stop after computing the charges (to run the quantum part on another machine)
+# Resuming: if NAME/NAME_opt.xyz and NAME/NAME.charges already exist, the quantum part is skipped
+# and only the Amber part is run.
 # =============================================================================
 set -euo pipefail
 
@@ -50,7 +50,7 @@ export KMP_STACKSIZE=200M
 
 mkdir -p "$NAME" && cd "$NAME"
 
-# ---------------------------- 1. estructura inicial ---------------------------
+# ---------------------------- 1. initial structure ----------------------------
 if [ -s "${NAME}_opt.xyz" ] && [ -s "$NAME.charges" ]; then
   echo ">> $NAME: reanudando con ${NAME}_opt.xyz y $NAME.charges ya calculados"
   cp "${NAME}_opt.xyz" opt.xyz
@@ -82,10 +82,10 @@ with open('start.xyz', 'w') as f:
     for a in m.GetAtoms():
         p = conf.GetAtomPosition(a.GetIdx())
         f.write('%s %.6f %.6f %.6f\n' % (a.GetSymbol(), p.x, p.y, p.z))
-# clases de simetria topologica (atomos equivalentes) para promediar cargas
-g = Chem.RWMol(m)                      # grafo generico: enlaces simples, sin cargas ni aromaticidad,
-for b in g.GetBonds():                 # para que las formas de resonancia (guanidinio, carboxilato,
-    b.SetBondType(Chem.BondType.SINGLE)   # fosfato) resulten equivalentes
+# topological symmetry classes (equivalent atoms) to average the charges
+g = Chem.RWMol(m)                      # generic graph: single bonds, no charges or aromaticity,
+for b in g.GetBonds():                 # so that resonance forms (guanidinium, carboxylate,
+    b.SetBondType(Chem.BondType.SINGLE)   # phosphate) come out equivalent
     b.SetIsAromatic(False)
 for a in g.GetAtoms():
     a.SetFormalCharge(0)
@@ -104,7 +104,7 @@ fi
 NAT=$(head -1 start.xyz | tr -d ' \r')
 echo ">> $NAME | $NAT atomos | carga $CHG | multiplicidad $MULT"
 
-# ---------------------------- 2. ORCA: optimizacion HF/6-31G* -------------------
+# ---------------------------- 2. ORCA: HF/6-31G* optimization -------------------
 echo "== Optimizacion HF/6-31G* (ORCA)"
 {
   echo "! HF 6-31G* Opt TightSCF"
@@ -118,7 +118,7 @@ cp opt.xyz "${NAME}_opt.xyz"
 EOPT=$(grep "FINAL SINGLE POINT ENERGY" opt.out | tail -1 | awk '{print $5}')
 echo "   energia final: $EOPT Eh"
 
-# ---------------------------- 3. RESP con Multiwfn ----------------------------
+# ---------------------------- 3. RESP with Multiwfn ---------------------------
 echo "== Ajuste RESP de dos etapas (Multiwfn)"
 "$ORCA_HOME/orca_2mkl" opt -molden > /dev/null 2>&1
 [ -f opt.molden.input ] || { echo "ERROR: orca_2mkl no genero opt.molden.input"; exit 1; }
@@ -127,7 +127,7 @@ printf '7\n18\n1\ny\n0\nq\n' | Multiwfn opt.molden.input > resp.log 2>&1 || true
 awk '{print $NF}' opt.chg > "$NAME.charges"
 [ "$(wc -l < "$NAME.charges")" -eq "$NAT" ] || { echo "ERROR: numero de cargas distinto del de atomos"; exit 1; }
 grep -E "Sum of charges|RMSE" resp.log | tail -2
-# atomos topologicamente equivalentes (solo con SMILES): se promedian sus cargas
+# topologically equivalent atoms (SMILES input only): their charges are averaged
 if [ -s "$NAME.classes" ]; then
 python - "$NAME.charges" "$NAME.classes" << 'PYEOF'
 import sys
@@ -154,7 +154,7 @@ if [ "${QM_ONLY:-0}" = "1" ]; then
   exit 0
 fi
 
-# ---------------------------- 4. PDB con nombres de atomo, mol2 y frcmod --------
+# ---------------------------- 4. PDB with atom names, mol2 and frcmod -----------
 python - "$NAME" "${NAME}_opt.xyz" "$NAME.charges" << 'PYEOF'
 import sys
 from collections import Counter
@@ -178,7 +178,7 @@ if grep -q "ATTN" "$NAME.frcmod"; then
   echo "   AVISO: parmchk2 marco parametros con ATTN en $NAME.frcmod; revisalos antes de usar la sonda"
 fi
 
-# ---------------------------- 5. unidad Amber (.off) ----------------------------
+# ---------------------------- 5. Amber unit (.off) ------------------------------
 cat > make_off.leap << EOF
 source leaprc.$ATYPE
 $NAME = loadMol2 $NAME.mol2

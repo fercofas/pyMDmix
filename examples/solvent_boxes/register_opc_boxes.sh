@@ -1,7 +1,7 @@
 #!/bin/bash
-# Registra en la base de solventes de pyMDMix las cajas OPC validadas de opc_boxes/:
-# ETAO, ANTO, MOHO, ISOO, MAMO, ISO5O e IONO.
-# Uso (con el entorno pymdmix3 activo):  bash register_opc_boxes.sh
+# Registers the validated OPC boxes in opc_boxes/ in the pyMDMix solvent database:
+# ETAO, ANTO, MOHO, ISOO, MAMO, ISO5O and IONO.
+# Usage (with the pymdmix3 environment active):  bash register_opc_boxes.sh
 HERE=$(cd "$(dirname "$0")" && pwd)/opc_boxes
 command -v mdmix > /dev/null || { echo "ERROR: mdmix no esta en el PATH (conda activate pymdmix3)"; exit 1; }
 cd "$HERE" || exit 1
