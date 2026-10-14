@@ -207,18 +207,19 @@ tleap -f 3_build.leap > 3_build.log || { echo "ERROR: tleap fallo con 3_build.le
 [ -s mix.parm7 ] && [ -s mix.rst7 ] || { echo "ERROR etapa 3: revisa 3_build.log"; exit 1; }
 echo "   carga total reportada por tleap:"; grep -i "total unperturbed charge\|Total perturbed charge" 3_build.log || true
 grep -E "Errors = [1-9]|Fatal Error|FATAL" 3_build.log && { echo "AVISO: tleap reporto errores, revisa 3_build.log"; } || true
-# Parametros de torsion antiguos (PARMSET sin SCEE/SCNB) dejan SCNB = 0 en el parm7 y dan 1-4 VDW = -Infinity.
-# Se detecta y se corrige con valores de Amber (SCEE 1.2, SCNB 2.0).
+# Parametros de torsion antiguos (PARMSET sin SCEE/SCNB) dejan SCEE/SCNB sin inicializar (valores basura o 0) en el
+# parm7 y dan 1-4 VDW = -Infinity. Se detectan los fuera de rango y se fijan a los valores de Amber (1.2 / 2.0).
 python - << 'PYEOF'
 import parmed
 p = parmed.load_file('mix.parm7', 'mix.rst7')
-bad = [t for t in p.dihedral_types if not t.scnb or not t.scee]
-if bad:
-    for t in p.dihedral_types:
-        if not t.scee: t.scee = 1.2
-        if not t.scnb: t.scnb = 2.0
+n = 0
+for t in p.dihedral_types:
+    if not (1.0 <= t.scnb <= 3.0 and 1.0 <= t.scee <= 2.0):
+        t.scee, t.scnb = 1.2, 2.0
+        n += 1
+if n:
     p.save('mix.parm7', overwrite=True)
-    print('   AVISO: %d tipos de torsion sin SCEE/SCNB; corregidos a 1.2/2.0 en mix.parm7' % len(bad))
+    print('   AVISO: %d tipos de torsion con SCEE/SCNB fuera de rango; fijados a 1.2/2.0 en mix.parm7' % n)
 PYEOF
 fi
 
