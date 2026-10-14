@@ -72,3 +72,4 @@ UPDATE HISTORY (ZIP)
 - Minimization now runs with "mpirun -np 10 pmemd.MPI" by default (AMBER_MIN_EXE).
 - examples/md_tools: apply_4fs_hmr.sh (optional 4 fs time step, iwrap=0 and hydrogen mass repartitioning with parmed on one topology copied to all replicas) and run_replicas.sh (one equilibration, then production-only runs for the other replicas, optionally in parallel on several GPUs).
 - examples/solvent_boxes: build_box.sh accepts counterions through IONS (for example IONS="Cl-:19"); build_probe_boxes.sh adds GDM (guanidinium chloride) and MPH (sodium methyl phosphate) at 0.5 M in 40 A boxes, with probes/GDM.config and probes/MPH.config. TUTORIAL_CAJAS.md section 9.6 documents the concentration criteria for probe boxes (BNZ and IBN 0.25 M, IMD, ACD, GDM and MPH 0.5 M; 20 % v/v only applies to miscible liquids).
+- TUTORIAL_CAJAS.md translated to English.

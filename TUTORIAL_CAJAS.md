@@ -1,17 +1,17 @@
-# Construcción de cajas de solvente mixto con agua OPC, paso a paso
+# Building mixed-solvent boxes with OPC water, step by step
 
-Este documento describe cómo se construye, valida y registra en pyMDMix una caja de solvente mixto (cosolvente orgánico en agua OPC). Aplica a los cosolventes de la biblioteca (ETA, ANT, MAM, ISO, ISO5, MOH, PYR1 e ION) y a cualquier cosolvente nuevo cuyos parámetros ya estén en un archivo `.off`. Los archivos están en `examples/solvent_boxes/`.
+This document describes how a mixed-solvent box (organic cosolvent in OPC water) is built, validated and registered in pyMDMix. It applies to the cosolvents of the library (ETA, ANT, MAM, ISO, ISO5, MOH, PYR1 and ION) and to any new cosolvent whose parameters are already stored in an `.off` file. The files are in `examples/solvent_boxes/`.
 
-> Estado de validación. La caja de etanol (ETAO) se construyó y validó en una instalación real: densidad de 0.9678 ± 0.0052 g/cm³ (experimental aproximado para 17 % p/p y 300 K: 0.97 g/cm³), sin deriva entre mitades de la trayectoria y 1672 sitios virtuales EPW. Los perfiles de los demás cosolventes siguen el mismo procedimiento y se están validando uno a uno. Cada caja debe pasar la validación de la sección 5 antes de usarse.
+> Validation status. The ethanol box (ETAO) was built and validated on a real installation: density 0.9678 ± 0.0052 g/cm³ (approximate experimental value for 17 % w/w at 300 K: 0.97 g/cm³), no drift between the halves of the trajectory and 1672 EPW virtual sites. The other cosolvent profiles follow the same procedure and are validated one by one. Every box must pass the validation of section 5 before it is used.
 
-## 1. Fundamento
+## 1. Rationale
 
-1. **Los cosolventes no se reparametrizan.** Las cargas RESP y los tipos atómicos del cosolvente se derivaron en fase gas o con GAFF y no dependen del modelo de agua. Lo que cambia es el equilibrio solvente-agua, por eso la caja se reconstruye, se reequilibra y se valida (densidad y agregación).
-2. **OPC es un modelo de cuatro puntos.** La molécula de agua incluye un sitio virtual `EPW`. Por eso hay que cargar `leaprc.water.opc`, escribir los PDB con `include_ep` y comprobar que el número de `EPW` es igual al número de aguas.
-3. **ff19SB y OPC se diseñaron en conjunto.** El script carga `leaprc.protein.ff19SB` y `leaprc.gaff2` (los cosolventes orgánicos usan tipos GAFF2).
-4. **Tamaño de caja.** Las cajas originales de MDMix miden unos 20 Å. Con un corte de 9 Å, `pmemd` exige que el radio de la esfera máxima de la celda sea mayor que corte + 2 Å, y `pmemd.cuda` rechaza cajas pequeñas ("Small box detected"). El script replica la caja original `REP` veces por lado (por defecto, el menor entero que da al menos 36 Å). La fracción de mezcla no cambia.
+1. **Cosolvents are not reparametrized.** The RESP charges and atom types of the cosolvent were derived in the gas phase or with GAFF and do not depend on the water model. What changes is the solvent-water balance, which is why the box is rebuilt, re-equilibrated and validated (density and aggregation).
+2. **OPC is a four-point model.** The water molecule includes a virtual site, `EPW`. Therefore `leaprc.water.opc` must be loaded, PDB files must be written with `include_ep`, and the number of `EPW` sites must be checked against the number of waters.
+3. **ff19SB and OPC were designed together.** The script loads `leaprc.protein.ff19SB` and `leaprc.gaff2` (organic cosolvents use GAFF2 atom types).
+4. **Box size.** The original MDMix boxes measure about 20 Å. With a 9 Å cutoff, `pmemd` requires the radius of the largest sphere that fits in the cell to be larger than cutoff + 2 Å, and `pmemd.cuda` rejects small boxes ("Small box detected"). The script replicates the original box `REP` times per side (by default, the smallest integer that gives at least 36 Å). The mixture fraction does not change.
 
-## 2. Requisitos
+## 2. Requirements
 
 ```bash
 conda activate pymdmix3
@@ -20,23 +20,23 @@ which tleap cpptraj packmol pmemd pmemd.cuda
 ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff2|water.opc)$"
 ```
 
-## 3. Decidir la composición con `boxcalc.py`
+## 3. Choosing the composition with `boxcalc.py`
 
-`boxcalc.py` reemplaza a la hoja `molecule_calculator.ods`. Calcula el número de moléculas a partir de volúmenes de componentes puros (V = M / (ρ N_A)). No considera el volumen de exceso de la mezcla, por eso la densidad final se obtiene del NPT.
+`boxcalc.py` replaces the `molecule_calculator.ods` spreadsheet. It computes the number of molecules from the volumes of the pure components (V = M / (ρ N_A)). It does not consider the excess volume of the mixture, which is why the final density is obtained from the NPT run.
 
 ```bash
 cd examples/solvent_boxes
-python boxcalc.py table                                   # cosolventes disponibles
-python boxcalc.py library                                 # concentración real de las cajas TIP3P incluidas
-python boxcalc.py mix ETA --vv 20 --side 20               # moléculas para 20 % v/v en 20 Å
+python boxcalc.py table                                   # available cosolvents
+python boxcalc.py library                                 # actual concentration of the bundled TIP3P boxes
+python boxcalc.py mix ETA --vv 20 --side 20               # molecules for 20 % v/v in 20 Å
 python boxcalc.py check ETA --nco 136 --nwat 1672 --side 39.67
-python boxcalc.py pure ETA --side 23                      # caja de cosolvente puro
-python boxcalc.py molar UREA --molarity 7 --volume 0.1    # solución de molaridad dada
+python boxcalc.py pure ETA --side 23                      # pure cosolvent box
+python boxcalc.py molar UREA --molarity 7 --volume 0.1    # solution of a given molarity
 ```
 
-Concentración real de las cajas TIP3P de la biblioteca, calculada con `boxcalc.py library`:
+Actual concentration of the TIP3P boxes of the library, computed with `boxcalc.py library`:
 
-| Caja | Cosolvente + agua | % v/v | % p/p | Fracción molar | Molaridad |
+| Box | Cosolvent + water | % v/v | % w/w | Mole fraction | Molarity |
 |---|---|---|---|---|---|
 | ETAWAT20 | 17 + 209 | 20.9 | 17.2 | 0.0752 | 3.5 M |
 | ANTWAT20 | 17 + 209 | 19.1 | 15.6 | 0.0752 | 3.6 M |
@@ -44,94 +44,96 @@ Concentración real de las cajas TIP3P de la biblioteca, calculada con `boxcalc.
 | ISOWAT20 | 14 + 209 | 22.1 | 18.3 | 0.0628 | 2.9 M |
 | ISOWAT5 | 4 + 310 | 5.2 | 4.1 | 0.0127 | 0.7 M |
 | MOHWAT20 | 56 + 470 | 21.1 | 17.5 | 0.1065 | 5.2 M |
-| PYRWAT1 | 1 + 438 | 1.0 | 1.0 | 0.0023 | 0.08 M (ver nota) |
+| PYRWAT1 | 1 + 438 | 1.0 | 1.0 | 0.0023 | 0.08 M (see note) |
 
-Observaciones sobre la hoja de cálculo original:
+Remarks on the original spreadsheet:
 
-- En la hoja `ethanol_20%`, el volumen molecular del etanol (`ETHOH_vol`, celda B16) se calcula con la masa molar de la urea (60.06 g/mol, celda B6) y no con la del etanol (46.07 g/mol). El resultado correcto es 97.0 Å³ por molécula y no 126.4 Å³. Con el valor correcto, 17 ETA + 209 WAT corresponde a 20.9 % v/v, consistente con el nombre "20".
-- Las densidades de ANT, MAM, ISO, MOH y PYR que `boxcalc.py` usa no estaban en la hoja. Son valores de literatura (marcados `lit` en `boxcalc.py table`); confírmalos con tu proveedor antes de publicar.
-- La caja PYRWAT1 guardada en la biblioteca tiene 438 aguas en unos 28 Å de lado (densidad de partida cercana a 0.60 g/mL), es decir, es una caja con mucho vacío. `build_box.sh` no usa ese lado: para PYR1 parte de 23.65 Å, que corresponde a la composición real.
+- In the `ethanol_20%` sheet, the molecular volume of ethanol (`ETHOH_vol`, cell B16) is computed with the molar mass of urea (60.06 g/mol, cell B6) instead of that of ethanol (46.07 g/mol). The correct result is 97.0 Å³ per molecule, not 126.4 Å³. With the correct value, 17 ETA + 209 WAT corresponds to 20.9 % v/v, consistent with the name "20".
+- The densities of ANT, MAM, ISO, MOH and PYR used by `boxcalc.py` were not in the spreadsheet. They are literature values (marked `lit` in `boxcalc.py table`); confirm them with your supplier before publishing.
+- The PYRWAT1 box stored in the library has 438 waters in a side of about 28 Å (starting density close to 0.60 g/mL), that is, it contains a large void. `build_box.sh` does not use that side: for PYR1 it starts from 23.65 Å, which corresponds to the actual composition.
 
-## 4. Construir la caja
+## 4. Building the box
 
-Una carpeta de trabajo vacía por solvente:
+One empty working folder per solvent:
 
 ```bash
-mkdir -p ~/cajas/ANT && cd ~/cajas/ANT
-nohup bash /ruta/a/pyMDmix/examples/solvent_boxes/build_box.sh ANT > build.log 2>&1 &
+mkdir -p ~/boxes/ANT && cd ~/boxes/ANT
+nohup bash /path/to/pyMDmix/examples/solvent_boxes/build_box.sh ANT > build.log 2>&1 &
 tail -f build.log
 ```
 
-Perfiles incluidos: `ETA`, `ANT`, `MAM`, `ISO`, `ISO5`, `MOH`, `PYR1`, `ION`. Cada perfil toma el `.off` TIP3P de `pyMDMix/data/solventlib/`, el número de moléculas y el lado de la caja original.
+Bundled profiles: `ETA`, `ANT`, `MAM`, `ISO`, `ISO5`, `MOH`, `PYR1`, `ION`. Each profile takes the TIP3P `.off` from `pyMDMix/data/solventlib/`, the number of molecules and the side of the original box.
 
-Etapas:
+Stages:
 
-| Etapa | Qué hace | Salida principal |
+| Stage | What it does | Main output |
 |---|---|---|
-| 1 | Extrae las unidades del cosolvente del `.off` TIP3P | `RES.pdb`, `RES.lib` |
-| 2 | Obtiene una molécula de agua OPC y comprueba el átomo `EPW` | `wat_opc.pdb` |
-| 3 | Empaqueta con packmol y construye la topología con tleap | `mix.parm7`, `mix.rst7` |
-| 4 | Minimiza y calienta (50 ps) | `heat.rst7` |
-| 5 | NPT de 10 ns en GPU | `npt.nc`, `npt.out` |
-| 6 | Calcula densidad y tamaño de caja; elige el cuadro representativo | `6_analysis.log`, `best_frame.txt` |
-| 7 | Escribe `best.pdb` (con `include_ep`) y el `.off` final | `UNIT.off` |
-| 8 | Genera el `.config` del solvente y los RDF de agregación | `SOLV.config`, `rdf_*.dat` |
+| 1 | Extracts the cosolvent units from the TIP3P `.off` | `RES.pdb`, `RES.lib` |
+| 2 | Obtains an OPC water molecule and checks the `EPW` atom | `wat_opc.pdb` |
+| 3 | Packs with packmol and builds the topology with tleap | `mix.parm7`, `mix.rst7` |
+| 4 | Minimizes and heats (50 ps) | `heat.rst7` |
+| 5 | 10 ns NPT on GPU | `npt.nc`, `npt.out` |
+| 6 | Computes density and box size; selects the representative frame | `6_analysis.log`, `best_frame.txt` |
+| 7 | Writes `best.pdb` (with `include_ep`) and the final `.off` | `UNIT.off` |
+| 8 | Generates the solvent `.config` and the aggregation RDFs | `SOLV.config`, `rdf_*.dat` |
 
-Para reanudar desde una etapa: `bash build_box.sh ANT 5`. Variables que se pueden sobrescribir desde el entorno: `REP`, `NPT_NS`, `DISCARD_NS`, `TEMP`, `FFS`, `HEAT_CMD`, `NPT_CMD`, `SRC_OFF`, `SOLV`, `UNIT`.
+To resume from a given stage: `bash build_box.sh ANT 5`. Variables that can be overridden from the environment: `REP`, `NPT_NS`, `DISCARD_NS`, `TEMP`, `FFS`, `HEAT_CMD`, `NPT_CMD`, `SRC_OFF`, `SOLV`, `UNIT`, `IONS`.
 
-Ejemplos:
+Examples:
 
 ```bash
-REP=3 bash build_box.sh MOH            # caja más grande
-NPT_NS=20 bash build_box.sh ISO5       # NPT más largo
-REP=1 HEAT_CMD=pmemd NPT_CMD=pmemd bash build_box.sh PYR1   # CPU, solo si la caja ya es grande
+REP=3 bash build_box.sh MOH            # larger box
+NPT_NS=20 bash build_box.sh ISO5       # longer NPT
+REP=1 HEAT_CMD=pmemd NPT_CMD=pmemd bash build_box.sh PYR1   # CPU, only if the box is already large
 ```
 
-### 4.1 Cosolvente nuevo
+Note: the messages printed by the scripts at run time are still in Spanish (for example `LISTO`, `AVISO`, `FALLO`, meaning done, warning and failure).
 
-Si ya tienes un `.off` con la unidad del cosolvente parametrizada, define el perfil por variables:
+### 4.1 New cosolvent
+
+If you already have an `.off` with the parametrized cosolvent unit, define the profile through variables:
 
 ```bash
-python boxcalc.py mix TFE --vv 20 --side 21 --rep 2    # da NCO y NWAT
-COSOLV=TFE SRC_OFF=/ruta/TFE.off COMP="TFE:NN" NW0=NNN SIDE_EQ=21 \
-SOLV=TFEO UNIT=TFEOPC20 CFG_SRC=/ruta/tfe.config RDFA=":TFE@O1" RDFB=":TFE@O1" \
+python boxcalc.py mix TFE --vv 20 --side 21 --rep 2    # gives NCO and NWAT
+COSOLV=TFE SRC_OFF=/path/TFE.off COMP="TFE:NN" NW0=NNN SIDE_EQ=21 \
+SOLV=TFEO UNIT=TFEOPC20 CFG_SRC=/path/tfe.config RDFA=":TFE@O1" RDFB=":TFE@O1" \
 bash build_box.sh TFE
 ```
 
-Aquí `COMP` y `NW0` describen la caja original sin replicar (el script aplica `REP`). El `.off` debe contener una unidad con el nombre de cada residuo de `COMP`. Si el cosolvente no está parametrizado, primero hay que derivar cargas y parámetros (antechamber, RESP), cosa que este procedimiento no hace.
+Here `COMP` and `NW0` describe the original, unreplicated box (the script applies `REP`). The `.off` must contain one unit named after each residue in `COMP`. If the cosolvent is not parametrized, charges and parameters must be derived first (antechamber, RESP), which this procedure does not do (see section 9).
 
-## 5. Validar la caja
+## 5. Validating the box
 
-Condiciones mínimas antes de registrar:
+Minimum conditions before registering:
 
-1. `6_analysis.log`: la deriva de densidad entre la primera y la segunda mitad debe ser cercana a cero (|deriva| menor que la desviación estándar, típicamente < 0.002 g/cm³), y la densidad media debe estar dentro de pocos por ciento del valor experimental de la mezcla a esa fracción en peso y temperatura.
-2. La etapa 7 debe terminar con "sitios virtuales EPW en best.pdb" igual al valor esperado, y el `.off` debe listar las unidades de los cosolventes, `WAT` y la unidad de la caja.
-3. La etapa 8 imprime el máximo del primer pico y el valor de cola de g(r) entre 9 y 12 Å (debe ser cercano a 1). Un g(r) cosolvente-cosolvente con un primer máximo alto (> 3) a menos de 5 Å indica agregación. Compara con la caja TIP3P si dudas. Las cajas con pocas moléculas de cosolvente (ISO5, PYR1) dan RDF ruidosos.
-4. Revisa visualmente la última trayectoria (sin moléculas atravesando la caja de forma anómala).
+1. `6_analysis.log`: the density drift between the first and the second half must be close to zero (|drift| smaller than the standard deviation, typically < 0.002 g/cm³), and the mean density must be within a few percent of the experimental value of the mixture at that weight fraction and temperature.
+2. Stage 7 must end with "sitios virtuales EPW en best.pdb" (EPW virtual sites in best.pdb) equal to the expected value, and the `.off` must list the cosolvent units, `WAT` and the box unit.
+3. Stage 8 prints the height of the first peak and the tail value of g(r) between 9 and 12 Å (it must be close to 1). A cosolvent-cosolvent g(r) with a high first maximum (> 3) below 5 Å indicates aggregation. Compare with the TIP3P box if in doubt. Boxes with few cosolvent molecules (ISO5, PYR1) give noisy RDFs.
+4. Inspect the last trajectory visually (no molecules crossing the box in an anomalous way).
 
-Para obtener la densidad experimental de referencia de una mezcla etanol-agua, por ejemplo, usa las tablas de densidad por % p/p y temperatura (ver la columna "% p/p" de `boxcalc.py check`).
+To obtain the experimental reference density of an ethanol-water mixture, for example, use the density tables by % w/w and temperature (see the "% w/w" column of `boxcalc.py check`).
 
-## 6. Registrar el solvente en pyMDMix
+## 6. Registering the solvent in pyMDMix
 
 ```bash
-mkdir ~/mdmix_cajas && cd ~/mdmix_cajas
-cp ~/cajas/ANT/ANTOPC20.off ~/cajas/ANT/ANTO.config .
-grep -n "name\|objectfile\|boxunit\|watermodel" ANTO.config    # comprobar
+mkdir ~/mdmix_boxes && cd ~/mdmix_boxes
+cp ~/boxes/ANT/ANTOPC20.off ~/boxes/ANT/ANTO.config .
+grep -n "name\|objectfile\|boxunit\|watermodel" ANTO.config    # check
 mdmix create solvents -f ANTO.config
 mdmix info solvents | grep ANTO
 ```
 
-El `.config` generado por la etapa 8 reutiliza las secciones `[PROBES]` y `[TYPES]` del `.config` original. Si el comando falla con `InvalidPath`, el mensaje indica qué archivo no se encontró (normalmente `objectfile`).
+The `.config` generated by stage 8 reuses the `[PROBES]` and `[TYPES]` sections of the original `.config`. If the command fails with `InvalidPath`, the message states which file was not found (normally `objectfile`).
 
-Nombres de solvente que usa esta construcción: ETAO, ANTO, MAMO, ISOO, ISO5O, MOHO, PYR1O e IONO. Mantienen separadas las cajas TIP3P (ETA, ANT, ...) de las OPC.
+Solvent names used by this construction: ETAO, ANTO, MAMO, ISOO, ISO5O, MOHO, PYR1O and IONO. They keep the TIP3P boxes (ETA, ANT, ...) separate from the OPC ones. The validated boxes are stored in `examples/solvent_boxes/opc_boxes/` and can be registered all at once with `register_opc_boxes.sh`.
 
-## 7. Probar la caja con un sistema
+## 7. Testing the box with a system
 
 ```ini
 [SYSTEM]
 NAME = PEP
 OFF = pep.off
-# Con agua OPC es obligatorio cargar su campo de fuerza
+# With OPC water its force field must be loaded explicitly (or rely on the package default)
 EXTRAFF = leaprc.water.opc
 
 [MDSETTINGS]
@@ -145,121 +147,121 @@ RESTR = FREE
 mdmix create project -n PEP_OPC -f pep_opc.cfg
 ```
 
-En la réplica creada, `tleap` debe cargar `leaprc.water.opc` y la topología debe conservar los sitios `EPW`.
+In the created replica, `tleap` must load `leaprc.water.opc` and the topology must keep the `EPW` sites.
 
-## 8. Problemas frecuentes
+## 8. Common problems
 
-| Síntoma | Causa y solución |
+| Symptom | Cause and solution |
 |---|---|
-| `max pairlist cutoff must be less than unit cell max sphere radius` o `Small box detected` | Caja demasiado pequeña. Sube `REP`. |
-| tleap no encuentra un tipo atómico o parámetro del cosolvente | Falta cargar el campo de fuerza del tipo (por ejemplo `leaprc.gaff2`) o un `frcmod`. Ajusta `FFS`. |
-| `saveOff` rechaza la lista de unidades | Revisa `7_off.log`. La sintaxis `saveOff { ... }` se verificó con la caja de etanol (ETAOPC20.off contiene ETA, WAT y la unidad de la caja). |
-| El número de `EPW` no coincide | El PDB se escribió sin `include_ep`, o el residuo de agua no es `WAT`. |
-| Aviso de `tleap` con "Errors = N" distinto de 0 | Revisa `3_build.log` antes de seguir. |
-| La densidad no converge | Alarga el NPT con `NPT_NS=20` y aumenta `DISCARD_NS`. |
+| `max pairlist cutoff must be less than unit cell max sphere radius` or `Small box detected` | The box is too small. Increase `REP`. |
+| tleap cannot find an atom type or parameter of the cosolvent | The force field of that type is not loaded (for example `leaprc.gaff2`) or an `frcmod` is missing. Adjust `FFS`. |
+| `saveOff` rejects the unit list | Check `7_off.log`. The `saveOff { ... }` syntax was verified with the ethanol box (ETAOPC20.off contains ETA, WAT and the box unit). |
+| The number of `EPW` sites does not match | The PDB was written without `include_ep`, or the water residue is not `WAT`. |
+| `tleap` warning with "Errors = N" different from 0 | Check `3_build.log` before continuing. |
+| The density does not converge | Lengthen the NPT with `NPT_NS=20` and increase `DISCARD_NS`. |
 
-## 9. Sondas nuevas: parametrización con ORCA y Multiwfn
+## 9. New probes: parametrization with ORCA and Multiwfn
 
-Esta sección parametriza un cosolvente que no está en la biblioteca (benceno, isobutano, imidazol, acetaldehído, guanidinio, metilfosfato u otros). Produce la unidad Amber con cargas RESP y los parámetros GAFF que falten, y luego se construye la caja como en la sección 4.
+This section parametrizes a cosolvent that is not in the library (benzene, isobutane, imidazole, acetaldehyde, guanidinium, methyl phosphate or others). It produces the Amber unit with RESP charges and the missing GAFF parameters, and the box is then built as in section 4.
 
-### 9.1 Programas necesarios
+### 9.1 Required programs
 
-| Programa | Uso | Obtención |
+| Program | Use | Source |
 |---|---|---|
-| ORCA 6.x | optimización HF/6-31G* y ESP | descarga con cuenta académica en el foro de ORCA; `tar -xJf orca_*.tar.xz` |
-| Multiwfn | ajuste RESP de dos etapas | descarga desde la página de Multiwfn; `unzip` |
-| AmberTools | `antechamber`, `parmchk2`, `tleap` | ya instalado |
-| RDKit (o Open Babel) | SMILES a estructura 3D | `python -m pip install rdkit` en el entorno `pymdmix3` |
+| ORCA 6.x | HF/6-31G* optimization and ESP | download with an academic account from the ORCA forum; `tar -xJf orca_*.tar.xz` |
+| Multiwfn | two-stage RESP fit | download from the Multiwfn website; `unzip` |
+| AmberTools | `antechamber`, `parmchk2`, `tleap` | already installed |
+| RDKit (or Open Babel) | SMILES to 3D structure | `python -m pip install rdkit` in the `pymdmix3` environment |
 
-Notas de instalación:
+Installation notes:
 
-- En Ubuntu existe `/usr/bin/orca`, que es el lector de pantalla de GNOME y no el programa de química cuántica. No pongas ORCA en el PATH con ese nombre. Define una variable y usa la ruta completa:
+- On Ubuntu `/usr/bin/orca` exists, which is the GNOME screen reader and not the quantum chemistry program. Do not put ORCA in the PATH under that name. Define a variable and use the full path:
 
 ```bash
-export ORCA_HOME=/ruta/a/orca_6_1_1_linux_x86-64_shared_openmpi418_nodmrg
+export ORCA_HOME=/path/to/orca_6_1_1_linux_x86-64_shared_openmpi418_nodmrg
 export LD_LIBRARY_PATH=$ORCA_HOME:$LD_LIBRARY_PATH
-$ORCA_HOME/orca entrada.inp > salida.out
+$ORCA_HOME/orca input.inp > output.out
 ```
 
-- Multiwfn necesita pila ilimitada: `ulimit -s unlimited` y `export KMP_STACKSIZE=200M` (el script lo hace).
-- Comprobación de ORCA: una molécula de agua en HF/6-31G* debe dar -76.0090 Eh y terminar con `ORCA TERMINATED NORMALLY`.
+- Multiwfn needs an unlimited stack: `ulimit -s unlimited` and `export KMP_STACKSIZE=200M` (the script does this).
+- ORCA check: a water molecule at HF/6-31G* must give -76.0090 Eh and finish with `ORCA TERMINATED NORMALLY`.
 
-### 9.2 Una sonda
+### 9.2 A single probe
 
 ```bash
 conda activate pymdmix3
 source $AMBERHOME/amber.sh
-python -m pip install rdkit            # una sola vez
+python -m pip install rdkit            # once
 bash examples/solvent_boxes/make_probe.sh BNZ "c1ccccc1"
 ```
 
-Argumentos: nombre del residuo (1 a 4 caracteres en mayúsculas), SMILES o archivo `.xyz`, carga neta y multiplicidad (opcionales; 0 y 1 por defecto). El script:
+Arguments: residue name (1 to 4 uppercase characters), SMILES or an `.xyz` file, net charge and multiplicity (optional; 0 and 1 by default). The script:
 
-1. genera la estructura 3D (RDKit, MMFF);
-2. optimiza en HF/6-31G* con ORCA y calcula la función de onda;
-3. ajusta RESP de dos etapas con Multiwfn y promedia las cargas de átomos topológicamente equivalentes (formas de resonancia incluidas);
-4. asigna tipos GAFF con `antechamber` leyendo esas cargas, genera el `frcmod` con `parmchk2` y avisa si `parmchk2` marcó parámetros con `ATTN`;
-5. guarda `NOMBRE.off` con la unidad y los parámetros nuevos (objeto `NOMBREparms`).
+1. generates the 3D structure (RDKit, MMFF);
+2. optimizes at HF/6-31G* with ORCA and computes the wavefunction;
+3. performs the two-stage RESP fit with Multiwfn and averages the charges of topologically equivalent atoms (resonance forms included);
+4. assigns GAFF types with `antechamber` reading those charges, generates the `frcmod` with `parmchk2` and warns if `parmchk2` flagged parameters with `ATTN`;
+5. saves `NAME.off` with the unit and the new parameters (object `NAMEparms`).
 
-Con `QM_ONLY=1` se detiene tras las cargas, y si `NOMBRE_opt.xyz` y `NOMBRE.charges` ya existen se salta la parte cuántica.
+With `QM_ONLY=1` it stops after the charges, and if `NAME_opt.xyz` and `NAME.charges` already exist the quantum step is skipped.
 
-### 9.3 Varias sondas
+### 9.3 Several probes
 
 ```bash
-mkdir -p ~/cajas/probes && cd ~/cajas/probes
-nohup bash /ruta/a/examples/solvent_boxes/run_probes.sh > run_probes.log 2>&1 &
+mkdir -p ~/boxes/probes && cd ~/boxes/probes
+nohup bash /path/to/examples/solvent_boxes/run_probes.sh > run_probes.log 2>&1 &
 ```
 
-`run_probes.sh` procesa en serie benceno (BNZ), isobutano (IBN), imidazol (IMD), acetaldehído (ACD), guanidinio (GDM, carga +1) y metilfosfato (MPH, monoanión). Con `PROBES="BNZ IBN"` se elige un subconjunto. Al final imprime un resumen con `OK` o `FALLO` por sonda.
+`run_probes.sh` processes in series benzene (BNZ), isobutane (IBN), imidazole (IMD), acetaldehyde (ACD), guanidinium (GDM, charge +1) and methyl phosphate (MPH, monoanion). A subset is chosen with `PROBES="BNZ IBN"`. At the end it prints a summary with `OK` or `FALLO` (failure) per probe.
 
-### 9.4 Validación del protocolo
+### 9.4 Validation of the protocol
 
-El protocolo se comprobó con etanol (HF/6-31G*, conformero trans, ORCA 6.1.1 y Multiwfn 2026.10.1) contra las cargas de la unidad ETA de `ETAWAT20.off`:
+The protocol was checked with ethanol (HF/6-31G*, trans conformer, ORCA 6.1.1 and Multiwfn 2026.10.1) against the charges of the ETA unit in `ETAWAT20.off`:
 
-| Átomo | Biblioteca | Este protocolo |
+| Atom | Library | This protocol |
 |---|---|---|
 | C1 (CH3) | -0.250 | -0.271 |
 | C2 (CH2) | 0.519 | 0.537 |
 | O1 | -0.711 | -0.706 |
 | H1 (OH) | 0.415 | 0.411 |
 | H2, H3 (CH2) | -0.082 | -0.089 |
-| H4 a H6 (CH3) | 0.064 | 0.069 |
+| H4 to H6 (CH3) | 0.064 | 0.069 |
 
-Las diferencias son de 0.02 e como máximo. El conformero gauche (0.09 kcal/mol más alto) da cargas que difieren más (hasta 0.07 e en el carbono metílico), de modo que la dependencia del conformero es mayor que la diferencia con la biblioteca.
+The differences are 0.02 e at most. The gauche conformer (0.09 kcal/mol higher) gives charges that differ more (up to 0.07 e on the methyl carbon), so the conformer dependence is larger than the difference with the library.
 
-### 9.5 Limitaciones
+### 9.5 Limitations
 
-- Un solo conformero. En moléculas con rotores o grupos OH conviene ajustar varios conformeros con pesos; esta primera versión no lo hace.
-- RESP en fase gas con HF/6-31G*, que es la convención de Amber. Para aniones (metilfosfato) y cationes la fase gas es una aproximación; los dianiones (fosfato a pH 7) son problemáticos sin funciones difusas y no se incluyen.
-- El estado de protonación es una decisión del usuario. El metilfosfato se parametriza como monoanión.
-- El benceno y el isobutano no son miscibles con agua al 20 %. Se usan a baja concentración con `boxcalc.py dilute`:
+- A single conformer. For molecules with rotors or OH groups it is advisable to fit several conformers with weights; this first version does not do so.
+- Gas-phase RESP at HF/6-31G*, which is the Amber convention. For anions (methyl phosphate) and cations the gas phase is an approximation; dianions (phosphate at pH 7) are problematic without diffuse functions and are not included.
+- The protonation state is a user decision. Methyl phosphate is parametrized as a monoanion.
+- Benzene and isobutane are not miscible with water at 20 %. They are used at low concentration with `boxcalc.py dilute`:
 
 ```bash
 python boxcalc.py dilute BENZ --molar 0.25 --side 40
 ```
 
-### 9.6 Concentración de las cajas de sondas
+### 9.6 Concentration of the probe boxes
 
-La convención de 20 % v/v de las cajas de cosolventes miscibles (etanol, acetonitrilo, metanol, isopropanol) se obtiene de c = 0.20 · ρ · 1000 / M y no es aplicable a todas las sondas. Los criterios usados en `build_probe_boxes.sh` son:
+The 20 % v/v convention used for the boxes of miscible cosolvents (ethanol, acetonitrile, methanol, isopropanol) follows from c = 0.20 · ρ · 1000 / M and cannot be applied to every probe. The criteria used in `build_probe_boxes.sh` are:
 
-| Sonda | Concentración | Moléculas en 40 Å | Criterio |
+| Probe | Concentration | Molecules in 40 Å | Criterion |
 |---|---|---|---|
-| BNZ (benceno), IBN (isobutano) | 0.25 M | 10 | Sondas apolares con solubilidad muy baja en agua (benceno aprox. 0.02 M); una caja de 20 % v/v separaría en dos fases. 0.25 M es una concentración sobresaturada que permite muestrear sin agregación masiva. |
-| IMD (imidazol), ACD (acetaldehído) | 0.5 M | 19 | Sondas polares y solubles. |
-| GDM (guanidinio, +1), MPH (metilfosfato, -1) | 0.5 M | 19 | Sondas iónicas: no existe un líquido puro de referencia, por lo que el % v/v no está definido. Un equivalente de 20 % v/v (aprox. 2.5 a 3 M de sal) daría una fuerza iónica extrema y emparejamiento iónico con el contraión que distorsionaría el RDF. |
+| BNZ (benzene), IBN (isobutane) | 0.25 M | 10 | Apolar probes with very low solubility in water (benzene about 0.02 M); a 20 % v/v box would separate into two phases. 0.25 M is a supersaturated concentration that allows sampling without massive aggregation. |
+| IMD (imidazole), ACD (acetaldehyde) | 0.5 M | 19 | Polar, soluble probes. |
+| GDM (guanidinium, +1), MPH (methyl phosphate, -1) | 0.5 M | 19 | Ionic probes: there is no pure liquid of reference, so % v/v is undefined. A 20 % v/v equivalent (about 2.5 to 3 M of salt) would give an extreme ionic strength and ion pairing with the counterion that would distort the RDF. |
 
-Las sondas iónicas se construyen con el mismo número de contraiones (Cl- para GDM, Na+ para MPH, con los parámetros OPC de `leaprc.water.opc`), de modo que la caja es neutra. Se indican con la variable `IONS` de `build_box.sh` (por ejemplo `IONS="Cl-:19"`). Con 19 moléculas el muestreo es limitado (como en la caja de piridina, con solo 8), por lo que los primeros picos de los RDF cosolvente-cosolvente deben interpretarse con cautela.
+Ionic probes are built with the same number of counterions (Cl- for GDM, Na+ for MPH, using the OPC ion parameters of `leaprc.water.opc`), so that the box is neutral. They are specified with the `IONS` variable of `build_box.sh` (for example `IONS="Cl-:19"`). With 19 molecules the sampling is limited (as in the pyridine box, with only 8), so the first peaks of the cosolvent-cosolvent RDFs must be interpreted with caution.
 
-### 9.7 Construir la caja de la sonda
+### 9.7 Building the probe box
 
-Usa `NOMBRE.off`, el nombre de los objetos y las cuentas de `boxcalc.py` en las variables de `build_box.sh` (sección 4.1). Por ejemplo, para benceno a 0.25 M en 40 Å:
+Use `NAME.off`, the object names and the counts from `boxcalc.py` in the variables of `build_box.sh` (section 4.1). For example, for benzene at 0.25 M in 40 Å:
 
 ```bash
-mkdir -p ~/cajas/BNZ && cd ~/cajas/BNZ
-COSOLV=BNZ SRC_OFF=~/cajas/probes/BNZ/BNZ.off PARMS=BNZparms \
+mkdir -p ~/boxes/BNZ && cd ~/boxes/BNZ
+COSOLV=BNZ SRC_OFF=~/boxes/probes/BNZ/BNZ.off PARMS=BNZparms \
 COMP="BNZ:10" NW0=2091 SIDE_EQ=40 REP=1 \
 SOLV=BNZO UNIT=BNZOPC025 CFG_SRC= RDFA=":BNZ@C1" RDFB=":BNZ@C1" \
-bash /ruta/a/build_box.sh BNZ
+bash /path/to/build_box.sh BNZ
 ```
 
-Para una sonda iónica añade `IONS="Cl-:19"` (o `Na+:19`) a las variables anteriores. Como no hay `.config` de origen, el script no genera `BNZO.config`; hay que escribirlo (sección 6 y `examples/solvent_boxes/eta_opc.config`), con sondeos propios de la molécula (por ejemplo, `BNZ=BNZ@C1,C2,C3,C4,C5,C6` y tipo `Arom`).
+For an ionic probe add `IONS="Cl-:19"` (or `Na+:19`) to the variables above. Since there is no source `.config`, the script does not generate `BNZO.config`; it has to be written by hand (section 6 and `examples/solvent_boxes/eta_opc.config`), with probes specific to the molecule (for example, `BNZ=BNZ@C1,C2,C3,C4,C5,C6` and type `Arom`). The ready-made `.config` files of the probes are in `examples/solvent_boxes/probes/`.
