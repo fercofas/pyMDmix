@@ -61,3 +61,8 @@ UPDATE HISTORY (ZIP)
 - Added TUTORIAL.md, a complete project template (pyMDMix/data/templates/complete.cfg, used by "mdmix create template"), environment.yml with packmol and pinned numpy/biopython, and examples/solvent_boxes (OPC solvent box builder).
 - examples/solvent_boxes: build_box.sh builds OPC boxes for ETA, ANT, MAM, ISO, ISO5, MOH, PYR1 and ION (replaces build_eta_opc.sh); boxcalc.py is a composition calculator (replaces the molecule_calculator spreadsheet); eta_opc.config registers the validated ethanol/OPC box (ETAO). Step-by-step guide in TUTORIAL_CAJAS.md.
 - Solvent configuration parser: InvalidPath now reports which objectfile/frcmod was not found.
+- Default Amber force fields are now leaprc.protein.ff19SB and leaprc.gaff2 (settings, md-settings, templates, tutorials, box and probe scripts).
+- Amber restart files use the .rst7 extension (min.rst7, eqN.rst7, mdN.rst7, check_com.sh and getSimVolume).
+- ambpdb output is renumbered when it uses hybrid-36 numbering (more than 9999 residues or 99999 atoms), which Biskit cannot parse.
+- build_box.sh: stage 8 RDFs use cpptraj radial with the real box volume (the previous call was normalized to pure water density); rdf_recalc.sh recomputes them on existing trajectories; SCEE/SCNB values left uninitialized by old PARMSET torsions are set to 1.2/2.0 (fixes the PYR1 minimization crash).
+- Validated OPC boxes: ANT, MOH, ISO, MAM, ISO5 and ION (density drift < 0.001 g/cm3, RDF tails 0.94 to 1.04); probe parametrization with ORCA RESP (make_probe.sh, run_probes.sh) and probe boxes (build_probe_boxes.sh, probes/*.config).
