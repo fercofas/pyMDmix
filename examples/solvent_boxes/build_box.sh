@@ -32,18 +32,19 @@ START=${2:-1}
 # ------------------------------ perfiles --------------------------------------
 # SRC: .off TIP3P de origen | CFG: .config original | COMP: residuos cosolvente:numero (caja original)
 # NW0: aguas de la caja original | SIDE_EQ: lado equilibrado (A) de la caja original
-# SOLV: nombre del solvente nuevo | UNIT: unidad caja nueva | RDFA/RDFB: mascaras para el RDF cosolvente-cosolvente
+# PARMS: objetos PARMSET (parametros propios del cosolvente) guardados en el .off | SOLV: nombre del solvente nuevo | UNIT: unidad caja nueva | RDFA/RDFB: mascaras para el RDF cosolvente-cosolvente
 case "$COSOLV" in
   ETA)  P_SRC=ETAWAT20.off;    P_CFG=eta.config;  P_COMP="ETA:17";           P_NW0=209; P_SIDE=19.99; P_SOLV=ETAO;  P_UNIT=ETAOPC20; P_RDFA=":ETA@O1"; P_RDFB=":ETA@O1";;
-  ANT)  P_SRC=ANTWAT20.off;    P_CFG=ant.config;  P_COMP="ANT:17";           P_NW0=209; P_SIDE=19.86; P_SOLV=ANTO;  P_UNIT=ANTOPC20; P_RDFA=":ANT@N1"; P_RDFB=":ANT@N1";;
+  ANT)  P_PARMS=ANTparms; P_SRC=ANTWAT20.off;    P_CFG=ant.config;  P_COMP="ANT:17";           P_NW0=209; P_SIDE=19.86; P_SOLV=ANTO;  P_UNIT=ANTOPC20; P_RDFA=":ANT@N1"; P_RDFB=":ANT@N1";;
   MAM)  P_SRC=MAMWAT20.off;    P_CFG=mam.config;  P_COMP="MAM:18";           P_NW0=209; P_SIDE=19.85; P_SOLV=MAMO;  P_UNIT=MAMOPC20; P_RDFA=":MAM@O1"; P_RDFB=":MAM@O1";;
   ISO)  P_SRC=ISOWAT20.off;    P_CFG=iso.config;  P_COMP="ISO:14";           P_NW0=209; P_SIDE=20.06; P_SOLV=ISOO;  P_UNIT=ISOOPC20; P_RDFA=":ISO@O1"; P_RDFB=":ISO@O1";;
   ISO5) P_SRC=ISOWAT5_ok.off;  P_CFG=iso5.config; P_COMP="ISO:4";            P_NW0=310; P_SIDE=21.41; P_SOLV=ISO5O; P_UNIT=ISOOPC5;  P_RDFA=":ISO@O1"; P_RDFB=":ISO@O1";;
   MOH)  P_SRC=MOHWAT20.off;    P_CFG=moh.config;  P_COMP="MOH:56";           P_NW0=470; P_SIDE=26.23; P_SOLV=MOHO;  P_UNIT=MOHOPC20; P_RDFA=":MOH@O1"; P_RDFB=":MOH@O1";;
-  PYR1) P_SRC=PYRWAT1.off;     P_CFG=pyr1.config; P_COMP="PYR:1";            P_NW0=438; P_SIDE=23.65; P_SOLV=PYR1O; P_UNIT=PYROPC1;  P_RDFA=":PYR@N1"; P_RDFB=":PYR@N1";;
+  PYR1) P_PARMS=PYRparm;  P_SRC=PYRWAT1.off;     P_CFG=pyr1.config; P_COMP="PYR:1";            P_NW0=438; P_SIDE=23.65; P_SOLV=PYR1O; P_UNIT=PYROPC1;  P_RDFA=":PYR@N1"; P_RDFB=":PYR@N1";;
   ION)  P_SRC=IONWAT20.off;    P_CFG=ion.config;  P_COMP="CN3:12 COO:12";   P_NW0=315; P_SIDE=22.17; P_SOLV=IONO;  P_UNIT=IONOPC20; P_RDFA=":CN3@N1"; P_RDFB=":COO@O1";;
   *)    P_SRC=; P_CFG=; P_COMP=; P_NW0=; P_SIDE=; P_SOLV=; P_UNIT=; P_RDFA=; P_RDFB=;;
 esac
+P_PARMS=${P_PARMS:-}
 
 # ---------------------------- parametros -------------------------------------
 # Cualquier variable puede sobrescribirse desde el entorno (por ejemplo REP=3 NPT_NS=20).
@@ -55,6 +56,7 @@ NW0=${NW0:-$P_NW0}
 SIDE_EQ=${SIDE_EQ:-$P_SIDE}        # lado de la caja original equilibrada (A)
 SOLV=${SOLV:-$P_SOLV}              # nombre del solvente en pyMDMix
 UNIT=${UNIT:-$P_UNIT}              # nombre de la unidad caja en el .off final
+PARMS=${PARMS:-$P_PARMS}          # objetos PARMSET del .off (p. ej. ANTparms); vacio si no hay
 RDFA=${RDFA:-$P_RDFA}
 RDFB=${RDFB:-$P_RDFB}
 for v in SRC_OFF COMP NW0 SIDE_EQ SOLV UNIT; do
@@ -83,7 +85,8 @@ NFRAMES=$(( NPT_NS * 100 ))       # un cuadro cada 10 ps
 DISCARD_FR=$(( DISCARD_NS * 100 ))
 RESLIST=$(for c in $COMP; do echo -n "${c%%:*} "; done)
 SRC_LINES=$(for f in $FFS; do echo "source $f"; done)
-LOAD_LIBS=$(for r in $RESLIST; do echo "loadOff $r.lib"; done)
+OBJLIST="$RESLIST $PARMS"
+LOAD_LIBS=$(for r in $OBJLIST; do echo "loadOff $r.lib"; done)
 
 # ---------------------------- verificaciones ---------------------------------
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: no se encuentra '$1' en el PATH"; exit 1; }; }
@@ -103,19 +106,21 @@ run_stage() { [ "$START" -le "$1" ]; }
 
 # ------------------------------ ETAPA 1 --------------------------------------
 if run_stage 1; then
-echo "== Etapa 1: extraer cosolvente(s) [$RESLIST] de $SRC_OFF"
+echo "== Etapa 1: extraer cosolvente(s) [$RESLIST] y parametros [${PARMS:-ninguno}] de $SRC_OFF"
 {
   echo "$SRC_LINES"
   echo "loadOff $SRC_OFF"
   for r in $RESLIST; do
     echo "savePdb $r $r.pdb"
+  done
+  for r in $OBJLIST; do
     echo "saveOff $r $r.lib"
   done
   echo "quit"
 } > 1_cosolv.leap
 tleap -f 1_cosolv.leap > 1_cosolv.log || { echo "ERROR: tleap fallo con 1_cosolv.leap, revisa 1_cosolv.log"; tail -5 1_cosolv.log; exit 1; }
-for r in $RESLIST; do
-  [ -s $r.pdb ] && [ -s $r.lib ] || { echo "ERROR etapa 1: falta $r.pdb o $r.lib (el residuo $r no esta en $SRC_OFF?). Revisa 1_cosolv.log"; exit 1; }
+for r in $OBJLIST; do
+  [ -s $r.lib ] && { [ -s $r.pdb ] || [[ " $PARMS " == *" $r "* ]]; } || { echo "ERROR etapa 1: falta $r.pdb o $r.lib (el residuo $r no esta en $SRC_OFF?). Revisa 1_cosolv.log"; exit 1; }
 done
 fi
 
@@ -292,7 +297,7 @@ $LOAD_LIBS
 $UNIT = loadPdb best.pdb
 set $UNIT box { $BA $BB $BC }
 check $UNIT
-saveOff { $RESLIST WAT $UNIT } $UNIT.off
+saveOff { $OBJLIST WAT $UNIT } $UNIT.off
 quit
 EOF
 tleap -f 7_off.leap > 7_off.log || { echo "ERROR: tleap fallo con 7_off.leap, revisa 7_off.log"; tail -5 7_off.log; exit 1; }
