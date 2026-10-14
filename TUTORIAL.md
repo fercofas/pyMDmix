@@ -1,0 +1,215 @@
+# Tutorial rápido de pyMDMix 3 con cajas de solvente OPC
+
+Este tutorial recorre el flujo completo de la versión Python 3 de pyMDMix: preparar el entorno, construir una caja de solvente con agua OPC, crear un proyecto, ajustar el paso de integración, analizar las réplicas y obtener hot spots. Los comandos se escriben para una terminal con AmberTools disponible.
+
+> Estado de validación. El instalador, la interfaz `mdmix`, la lectura de la base de solventes y el análisis de trayectorias se verificaron. Las rutas que dependen de AMBER (tleap, pmemd, cpptraj) y de agua OPC con sitio virtual se están validando en una instalación real; los puntos marcados con **Verificar** indican qué comprobar.
+
+## 1. Entorno
+
+```bash
+git clone https://github.com/fercofas/pyMDmix.git
+cd pyMDmix
+git checkout py3-migration
+conda env create -f environment.yml        # crea el entorno pymdmix3
+conda activate pymdmix3
+python -m pip install -e .
+source $AMBERHOME/amber.sh                 # tleap, cpptraj, pmemd en el PATH
+```
+
+El archivo `environment.yml` fija `numpy<2` y `biopython<1.86` para que no choquen con las herramientas de Python de AmberTools. Además instala `packmol`, que solo se necesita para construir cajas de solvente.
+
+Comprobación:
+
+```bash
+which mdmix
+python -c "import pyMDMix; print(pyMDMix.__file__)"
+mdmix -h
+mdmix info solvents
+```
+
+Si `which mdmix` apunta a un script antiguo en `~/.local/bin`, activa primero el entorno `pymdmix3` o llama al módulo directamente: `python -m pyMDMix -h`.
+
+Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB` y `leaprc.gaff` (opción `FF` de `md-settings.cfg`). Comprueba que existan en tu instalación:
+
+```bash
+ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)"
+```
+
+## 2. Caja de solvente con agua OPC
+
+Las cajas incluidas (`ETAWAT20` y las demás) están equilibradas con TIP3P. Para usar OPC hay que reconstruirlas y reequilibrarlas con ese modelo de agua. No hace falta reparametrizar los cosolventes: las cargas RESP y los parámetros GAFF del cosolvente no dependen del agua. Sí conviene validar densidad y agregación (sección 2.3).
+
+### 2.1 Construcción (etanol, 17 ETA + 209 WAT)
+
+El script `examples/solvent_boxes/build_eta_opc.sh` hace todo el proceso:
+
+```bash
+mkdir -p ~/cajas/eta_opc && cd ~/cajas/eta_opc
+cp /ruta/a/pyMDmix/examples/solvent_boxes/build_eta_opc.sh .
+nohup bash build_eta_opc.sh > build.log 2>&1 &
+tail -f build.log
+```
+
+Etapas: (1) extrae el etanol de `ETAWAT20.off`; (2) obtiene una molécula de agua OPC con su sitio virtual `EPW`; (3) empaqueta con packmol y genera `mix.parm7` y `mix.rst7`; (4) minimiza y calienta; (5) equilibra 10 ns en NPT; (6) calcula densidad y caja; (7) escribe `ETAOPC20.off`.
+
+Notas:
+
+- La caja mide unos 20 Å, y `pmemd.cuda` la rechaza con el mensaje *Small box detected*. Por eso la etapa 5 corre en CPU (`pmemd.MPI` con `NCPU` procesos si existe `mpirun`; si no, `pmemd`). Puedes elegir el comando con `NPT_CMD="mpirun -np 16 pmemd.MPI"`.
+- Variables útiles: `FF` (por defecto `leaprc.protein.ff19SB`), `NPT_NS`, `TEMP`, `NETA`, `NWAT`, `SRC_OFF`.
+- Para reanudar desde una etapa: `bash build_eta_opc.sh 5`.
+- **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga 209 átomos `EPW`.
+
+### 2.2 Registrar el solvente
+
+```bash
+cp ETAOPC20.off /ruta/de/trabajo/ && cd /ruta/de/trabajo
+cp /ruta/a/pyMDmix/pyMDMix/data/solventlib/eta.config eta_opc.config
+```
+
+Edita `eta_opc.config`:
+
+```ini
+[GENERAL]
+name = ETAO
+info = Ethanol 20%% mixture in OPC water
+objectfile = ETAOPC20.off
+watermodel = OPC
+boxunit = ETAOPC20
+
+[PROBES]
+WAT=WAT@O
+CT=ETA@C1
+OH=ETA@O1
+
+[TYPES]
+OH=Don,Acc
+CT=Hyd
+WAT=Wat
+```
+
+Luego:
+
+```bash
+mdmix create solvents -f eta_opc.config
+mdmix info solvents | grep ETAO
+```
+
+Usa un nombre distinto de `ETA` para no sobrescribir la mezcla TIP3P. El archivo `examples/solvent_boxes/opc.config` es el equivalente para agua OPC pura.
+
+### 2.3 Validación recomendada
+
+Antes de usar la caja en producción, compara la densidad media de `6_analysis.log` con el valor experimental de la mezcla y revisa que no haya agregación anormal del cosolvente (función de distribución radial cosolvente-cosolvente). El equilibrio entre interacciones solvente-agua y solvente-solvente es lo que más puede cambiar al pasar de TIP3P a OPC.
+
+## 3. Crear un proyecto
+
+Genera una plantilla de configuración y edítala:
+
+```bash
+mdmix create template -f proyecto.cfg
+```
+
+La plantilla completa y comentada está en `pyMDMix/data/templates/complete.cfg`. Los puntos esenciales:
+
+```ini
+[SYSTEM]
+NAME = EF1
+OFF = ef1.off
+EXTRARES = ATP,ADP
+# Con agua OPC es obligatorio cargar su campo de fuerza
+EXTRAFF = leaprc.water.opc
+
+[MDSETTINGS]
+SOLVENTS = ETAO
+NREPL = 5
+NANOS = 20
+TEMP = 300
+RESTR = HA
+FORCE = 0.1
+```
+
+Crea el proyecto:
+
+```bash
+mdmix create project -n EF1_S2 -f proyecto.cfg
+cd EF1_S2/MD
+```
+
+Las carpetas de réplicas quedan dentro de `MD`, con el nombre `SOLVENTE_N` (por ejemplo `ETAO_1`). Los archivos de topología y coordenadas se guardan ahora como `*.parm7` y `*.rst7`.
+
+## 4. Ajustar el paso de integración y la frecuencia
+
+No es necesario editar los archivos `.in` con `sed`. Todas esas modificaciones se declaran en la sección `[MDSETTINGS]` del `cfg` antes de crear el proyecto:
+
+| Cambio en los `.in` | Opción equivalente en `[MDSETTINGS]` |
+|---|---|
+| `dt=0.002` a `dt=0.004` | `MD_TIMESTEP = 4` (en fs) |
+| `ntwx` y `ntpr` de 500 a 250 | `TRAJFREQUENCY = 250` |
+| `nstlim=500000` a `250000` en `md.in` | `PROD_STEPS = 250000` |
+| `nstlim=500000` a `250000` en `eq5.in` | `NPT_EQ_STEPS = 250000` |
+| `nstlim= 100000` a `50000` (calentamiento) | `HEATING_STEPS = 50000` |
+| `iwrap=1` a `iwrap=0` | `IWRAP = 0` |
+
+Ejemplo para pasos de 4 fs que conservan 1 ns por archivo y 1 ps entre cuadros:
+
+```ini
+MD_TIMESTEP = 4
+TRAJFREQUENCY = 250
+HEATING_STEPS = 50000
+NPT_EQ_STEPS = 250000
+PROD_STEPS = 250000
+IWRAP = 0
+```
+
+Un paso de 4 fs solo es estable si la topología tiene reparto de masa de hidrógenos (HMR). pyMDMix no lo aplica; hay que hacerlo antes sobre el `parm7` (por ejemplo con ParmEd, `HMassRepartition`). **Verificar** con una corrida corta que la energía total sea estable.
+
+Si ya creaste el proyecto y prefieres editar los archivos a mano, los `.in` están en `*/min`, `*/eq` y `*/md` de cada réplica.
+
+## 5. Ejecutar
+
+Genera los archivos para tu sistema de colas (o revisa `mdmix queue list`):
+
+```bash
+mdmix queue list
+mdmix queue write -n NOMBRE_COLA
+```
+
+Cada réplica tiene `min/`, `eq/` y `md/`. Los pasos de equilibración van de `eq1` a `eq5`, y la producción se divide en archivos `md1`, `md2`, etcétera.
+
+## 6. Análisis
+
+Se ejecuta desde la carpeta `MD` del proyecto, cuando las simulaciones han avanzado. La máscara es la lista de residuos del soluto sobre cuyo esqueleto se alinea.
+
+```bash
+MASK=331,332,335,336,337,343,344,371,372,374,375,378,404,405
+
+for i in 1 2 3 4 5; do
+    mdmix analyze align byname -s ETAO_$i -C4 --mask $MASK
+done
+
+mdmix plot rmsd bysolvent -s ETAO -o etao_rmsd.png
+mdmix analyze density bysolvent -s ETAO -C4
+mdmix analyze energy bysolvent -s ETAO
+```
+
+El alineamiento procesa los pasos de producción disponibles. Si lo lanzas mientras corren las simulaciones, se puede limitar con `-N 1:5` (del primer al quinto paso).
+
+Los hot spots se crean a partir de los mapas de energía libre promediados:
+
+```bash
+mdmix analyze hotspots create \
+    -i PROBE_AVG/ETAO_CT_DG0.dx PROBE_AVG/ETAO_OH_DG0.dx PROBE_AVG/ETAO_WAT_DG.dx \
+    -o ETAO_allprobes_hotspots
+```
+
+Salen un PDB con los hot spots y un archivo `.hset` (pickle) con el conjunto.
+
+## 7. Problemas frecuentes
+
+| Síntoma | Causa y solución |
+|---|---|
+| `Could not open file leaprc.ff14SB` | Ese archivo ya no existe en AmberTools recientes. Usa `leaprc.protein.ff19SB` (valor por defecto en esta versión). |
+| `Small box detected` en `pmemd.cuda` | Caja de menos de tres celdas de hash. Ejecuta en CPU (`pmemd.MPI`) o usa una caja mayor. |
+| `mdmix` ejecuta un script de Python 2 | Hay otro `mdmix` en `~/.local/bin`. Activa el entorno `pymdmix3` o usa `python -m pyMDMix`. |
+| `AMBERHOME env variable not defined!` | Ejecuta `source $AMBERHOME/amber.sh` antes de usar `mdmix`. |
+| Conflictos de `numpy` con herramientas de AmberTools | Fija `numpy<2` y `biopython<1.86` (ya incluido en `environment.yml`). |
+| Faltan los átomos `EPW` en un PDB escrito por cpptraj | Añade `include_ep` al comando `trajout ... pdb` (ya incluido en `check_com`). |
