@@ -29,7 +29,7 @@ mdmix info solvents
 
 Si `which mdmix` apunta a un script antiguo en `~/.local/bin`, activa primero el entorno `pymdmix3` o llama al módulo directamente: `python -m pyMDMix -h`.
 
-Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB` y `leaprc.gaff2` (opción `FF` de `md-settings.cfg`). Comprueba que existan en tu instalación:
+Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB`, `leaprc.gaff2` y `leaprc.water.opc` (opción `FF` de `md-settings.cfg`). El modelo de agua por defecto es OPC (`DEF_AMBER_WATBOX`), el buffer de solvatación es de 10 A y la temperatura por defecto es 310 K. Las cajas TIP3P antiguas (`ETAWAT20` y las demás) siguen siendo válidas si su archivo `.config` declara `watermodel = TIP3P`; en ese caso añade `leaprc.water.tip3p` en `EXTRAFF`. Comprueba que existan en tu instalación:
 
 ```bash
 ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)"
@@ -114,7 +114,7 @@ EXTRAFF = leaprc.water.opc
 SOLVENTS = ETAO
 NREPL = 5
 NANOS = 20
-TEMP = 300
+TEMP = 310
 RESTR = HA
 FORCE = 0.1
 ```
