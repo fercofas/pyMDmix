@@ -57,7 +57,7 @@ Notas:
 - La caja original de MDMix (17 ETA y 209 WAT, unos 20 Å) es demasiado pequeña para un corte de 9 Å: `pmemd` aborta con *max pairlist cutoff must be less than unit cell max sphere radius* y `pmemd.cuda` la rechaza con *Small box detected*. Por eso el script replica la caja `REP` veces por lado (por defecto `REP=2`: 136 ETA y 1672 WAT en unos 40 Å). Las fracciones de mezcla no cambian. El calentamiento y el NPT corren en GPU (`pmemd.cuda`); con `REP=1` hay que usar CPU: `REP=1 HEAT_CMD=pmemd NPT_CMD=pmemd`, y el corte tendría que bajarse.
 - Variables útiles: `FF` (por defecto `leaprc.protein.ff19SB`), `NPT_NS`, `TEMP`, `NETA`, `NWAT`, `SRC_OFF`.
 - Para reanudar desde una etapa: `bash build_eta_opc.sh 5`.
-- **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga 209 átomos `EPW`.
+- **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga tantos átomos `EPW` como aguas (1672 con `REP=2`).
 
 ### 2.2 Registrar el solvente
 
