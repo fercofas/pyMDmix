@@ -145,8 +145,12 @@ fi
 # ------------------------------ ETAPA 3 --------------------------------------
 if run_stage 3; then
 echo "== Etapa 3: empaquetar y construir topologia"
+# Margen de 1 A en cada cara: packmol no conoce la periodicidad y, sin margen, dos moleculas
+# pegadas a caras opuestas quedan casi superpuestas al aplicar la caja periodica.
+PLO=1.0
+PHI=$(awk "BEGIN{printf \"%.2f\", $SIDE0-1.0}")
 PACK_BLOCKS=$(for c in $COMP; do
-  printf 'structure %s.pdb\n  number %d\n  inside box 0. 0. 0. %s %s %s\nend structure\n\n' "${c%%:*}" $(( ${c##*:} * R3 )) $SIDE0 $SIDE0 $SIDE0
+  printf 'structure %s.pdb\n  number %d\n  inside box %s %s %s %s %s %s\nend structure\n\n' "${c%%:*}" $(( ${c##*:} * R3 )) $PLO $PLO $PLO $PHI $PHI $PHI
 done)
 cat > mix.inp << EOF
 tolerance 2.0
@@ -158,11 +162,35 @@ seed 12345
 $PACK_BLOCKS
 structure wat_opc.pdb
   number $NWAT
-  inside box 0. 0. 0. $SIDE0 $SIDE0 $SIDE0
+  inside box $PLO $PLO $PLO $PHI $PHI $PHI
 end structure
 EOF
 packmol < mix.inp > 3_packmol.log
 grep -q "Success" 3_packmol.log || { echo "ERROR etapa 3: packmol no convergio (ver 3_packmol.log)"; exit 1; }
+python - mix_packed.pdb $SIDE0 << 'PYEOF'
+import sys
+import numpy as np
+from scipy.spatial import cKDTree
+pdb, side = sys.argv[1], float(sys.argv[2])
+xyz, res = [], []
+for l in open(pdb):
+    if l.startswith(('ATOM', 'HETATM')):
+        xyz.append([float(l[30:38]), float(l[38:46]), float(l[46:54])])
+        res.append(l[22:27])            # numero de residuo + codigo de insercion
+xyz = np.array(xyz) % side
+res = np.array([hash(r) for r in res])
+pairs = cKDTree(xyz, boxsize=side).query_pairs(1.5, output_type='ndarray')
+inter = pairs[res[pairs[:, 0]] != res[pairs[:, 1]]] if len(pairs) else pairs
+if len(inter):
+    dd = xyz[inter[:, 0]] - xyz[inter[:, 1]]
+    dd -= side * np.round(dd / side)
+    d = np.linalg.norm(dd, axis=1)
+    print('   AVISO: %d pares de atomos de moleculas distintas a menos de 1.5 A (minimo %.2f A)' % (len(inter), d.min()))
+    if d.min() < 0.8:
+        sys.exit('ERROR etapa 3: hay solapamientos graves en mix_packed.pdb')
+else:
+    print('   empaquetado sin contactos intermoleculares < 1.5 A (con periodicidad)')
+PYEOF
 
 cat > 3_build.leap << EOF
 $SRC_LINES
