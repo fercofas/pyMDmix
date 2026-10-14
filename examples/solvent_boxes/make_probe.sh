@@ -14,13 +14,13 @@
 #   NOMBRE.mol2, NOMBRE.frcmod, NOMBRE.charges, NOMBRE_opt.xyz
 #
 # Protocolo: optimizacion HF/6-31G*, ESP del mismo nivel, ajuste RESP de dos etapas
-# (Multiwfn, equivalencias por conectividad), tipos GAFF (antechamber) y frcmod (parmchk2).
+# (Multiwfn, equivalencias por conectividad), tipos GAFF2 (antechamber) y frcmod (parmchk2).
 # Un solo conformero: en moleculas flexibles (OH, rotores) la carga depende del conformero;
 # ver TUTORIAL_CAJAS.md, seccion "Sondas nuevas".
 #
 # Variables (con valores por defecto de ragnarok):
 #   ORCA_HOME  carpeta de ORCA 6.x          MULTIWFN_HOME  carpeta con el ejecutable Multiwfn
-#   ATYPE=gaff tipo atomico                   NPROCS=1      nucleos para ORCA (usa ruta completa)
+#   ATYPE=gaff2 tipo atomico                   NPROCS=1      nucleos para ORCA (usa ruta completa)
 #   QM_ONLY=1  se detiene tras calcular las cargas (para correr la parte cuantica en otra maquina)
 # Reanudacion: si NOMBRE/NOMBRE_opt.xyz y NOMBRE/NOMBRE.charges ya existen, se salta la parte
 # cuantica y solo se hace la parte de Amber.
@@ -33,7 +33,7 @@ NAME=${1:-}; INPUT=${2:-}; CHG=${3:-0}; MULT=${4:-1}
 
 ORCA_HOME=${ORCA_HOME:-/mnt/data_ubuntu/software/orca_6_1_1_linux_x86-64_shared_openmpi418_nodmrg}
 MULTIWFN_HOME=${MULTIWFN_HOME:-/mnt/data_ubuntu/software/Multiwfn/Multiwfn_2026.10.1_bin_Linux}
-ATYPE=${ATYPE:-gaff}
+ATYPE=${ATYPE:-gaff2}
 NPROCS=${NPROCS:-1}
 
 [ -x "$ORCA_HOME/orca" ] || { echo "ERROR: no existe $ORCA_HOME/orca (define ORCA_HOME)"; exit 1; }

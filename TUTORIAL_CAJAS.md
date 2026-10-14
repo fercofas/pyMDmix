@@ -8,7 +8,7 @@ Este documento describe cómo se construye, valida y registra en pyMDMix una caj
 
 1. **Los cosolventes no se reparametrizan.** Las cargas RESP y los tipos atómicos del cosolvente se derivaron en fase gas o con GAFF y no dependen del modelo de agua. Lo que cambia es el equilibrio solvente-agua, por eso la caja se reconstruye, se reequilibra y se valida (densidad y agregación).
 2. **OPC es un modelo de cuatro puntos.** La molécula de agua incluye un sitio virtual `EPW`. Por eso hay que cargar `leaprc.water.opc`, escribir los PDB con `include_ep` y comprobar que el número de `EPW` es igual al número de aguas.
-3. **ff19SB y OPC se diseñaron en conjunto.** El script carga `leaprc.protein.ff19SB` y `leaprc.gaff` (los cosolventes orgánicos usan tipos GAFF).
+3. **ff19SB y OPC se diseñaron en conjunto.** El script carga `leaprc.protein.ff19SB` y `leaprc.gaff2` (los cosolventes orgánicos usan tipos GAFF2).
 4. **Tamaño de caja.** Las cajas originales de MDMix miden unos 20 Å. Con un corte de 9 Å, `pmemd` exige que el radio de la esfera máxima de la celda sea mayor que corte + 2 Å, y `pmemd.cuda` rechaza cajas pequeñas ("Small box detected"). El script replica la caja original `REP` veces por lado (por defecto, el menor entero que da al menos 36 Å). La fracción de mezcla no cambia.
 
 ## 2. Requisitos
@@ -17,7 +17,7 @@ Este documento describe cómo se construye, valida y registra en pyMDMix una caj
 conda activate pymdmix3
 source $AMBERHOME/amber.sh
 which tleap cpptraj packmol pmemd pmemd.cuda
-ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)$"
+ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff2|water.opc)$"
 ```
 
 ## 3. Decidir la composición con `boxcalc.py`
@@ -152,7 +152,7 @@ En la réplica creada, `tleap` debe cargar `leaprc.water.opc` y la topología de
 | Síntoma | Causa y solución |
 |---|---|
 | `max pairlist cutoff must be less than unit cell max sphere radius` o `Small box detected` | Caja demasiado pequeña. Sube `REP`. |
-| tleap no encuentra un tipo atómico o parámetro del cosolvente | Falta cargar el campo de fuerza del tipo (por ejemplo `leaprc.gaff`) o un `frcmod`. Ajusta `FFS`. |
+| tleap no encuentra un tipo atómico o parámetro del cosolvente | Falta cargar el campo de fuerza del tipo (por ejemplo `leaprc.gaff2`) o un `frcmod`. Ajusta `FFS`. |
 | `saveOff` rechaza la lista de unidades | Revisa `7_off.log`. La sintaxis `saveOff { ... }` se verificó con la caja de etanol (ETAOPC20.off contiene ETA, WAT y la unidad de la caja). |
 | El número de `EPW` no coincide | El PDB se escribió sin `include_ep`, o el residuo de agua no es `WAT`. |
 | Aviso de `tleap` con "Errors = N" distinto de 0 | Revisa `3_build.log` antes de seguir. |

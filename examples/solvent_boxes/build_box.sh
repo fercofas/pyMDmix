@@ -73,7 +73,7 @@ TEMP=${TEMP:-300.0}               # K
 NPT_NS=${NPT_NS:-10}              # duracion de la fase NPT (ns)
 DISCARD_NS=${DISCARD_NS:-2}       # ns de NPT que se descartan en el analisis
 # Campos de fuerza del soluto: ff19SB (se diseno para usarse con OPC) y gaff (cosolventes organicos)
-FFS=${FFS:-"leaprc.protein.ff19SB leaprc.gaff"}
+FFS=${FFS:-"leaprc.protein.ff19SB leaprc.gaff2"}
 PMEMD_CPU=${PMEMD_CPU:-pmemd}
 # Calentamiento y NPT en GPU. Si la caja es pequena (REP=1) use CPU: NPT_CMD=pmemd HEAT_CMD=pmemd
 PMEMD_GPU=${PMEMD_GPU:-pmemd.cuda}

@@ -29,7 +29,7 @@ mdmix info solvents
 
 Si `which mdmix` apunta a un script antiguo en `~/.local/bin`, activa primero el entorno `pymdmix3` o llama al módulo directamente: `python -m pyMDMix -h`.
 
-Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB` y `leaprc.gaff` (opción `FF` de `md-settings.cfg`). Comprueba que existan en tu instalación:
+Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB` y `leaprc.gaff2` (opción `FF` de `md-settings.cfg`). Comprueba que existan en tu instalación:
 
 ```bash
 ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)"
