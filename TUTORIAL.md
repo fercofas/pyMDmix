@@ -27,6 +27,19 @@ mdmix -h
 mdmix info solvents
 ```
 
+Si ya tienes AmberTools instalado fuera de conda (por ejemplo `/opt/ambertools26`), elimina la línea `- ambertools` de `environment.yml` antes de crear el entorno y carga tu instalación con `source /ruta/amber.sh`. En ese caso comprueba que sus herramientas de Python sean compatibles con `numpy<2`.
+
+pmemd y pmemd.cuda no vienen con el paquete `ambertools` de conda. Si no los tienes, `sander` sirve para pruebas pequeñas: cambia `AMBER_PROD_EXE` y `AMBER_MIN_EXE` en `settings.cfg`.
+
+Registro de las cajas OPC incluidas (etanol, acetonitrilo, metanol, isopropanol al 20 % y 5 %, acetamida y la mezcla iónica acetato/metilamonio):
+
+```bash
+bash examples/solvent_boxes/register_opc_boxes.sh
+mdmix info solvents
+```
+
+Prueba mínima de un proyecto (si tienes tleap y cpptraj): `mdmix create template`, ajusta `1YER.cfg` o el PDB que uses con `SOLVENTS = ETAO` y ejecuta `mdmix create project -n PRUEBA -f proyecto.cfg`. En el `.parm7` resultante deben aparecer tantos `EPW` como moléculas `WAT`.
+
 Si `which mdmix` apunta a un script antiguo en `~/.local/bin`, activa primero el entorno `pymdmix3` o llama al módulo directamente: `python -m pyMDMix -h`.
 
 Nombres de campos de fuerza. En AmberTools recientes ya no existe `leaprc.ff14SB`. Esta versión carga por defecto `leaprc.protein.ff19SB`, `leaprc.gaff2` y `leaprc.water.opc` (opción `FF` de `md-settings.cfg`). El modelo de agua por defecto es OPC (`DEF_AMBER_WATBOX`), el buffer de solvatación es de 10 A y la temperatura por defecto es 310 K. Las cajas TIP3P antiguas (`ETAWAT20` y las demás) siguen siendo válidas si su archivo `.config` declara `watermodel = TIP3P`; en ese caso añade `leaprc.water.tip3p` en `EXTRAFF`. Comprueba que existan en tu instalación:
