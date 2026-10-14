@@ -12,16 +12,21 @@
 #   2  Obtener una molecula de agua OPC (con sitio virtual EPW)
 #   3  Empaquetar con packmol y generar parm7/rst7 con tleap
 #   4  Minimizar y calentar (pmemd)
-#   5  Equilibrar en NPT (CPU: la caja es demasiado pequena para pmemd.cuda)
+#   5  Equilibrar en NPT (GPU)
 #   6  Analizar densidad y caja, elegir el cuadro representativo
 #   7  Construir el .off final con tleap
 # =============================================================================
 set -euo pipefail
 
 # ---------------------------- parametros -------------------------------------
-NETA=${NETA:-17}                  # moleculas de etanol
-NWAT=${NWAT:-209}                 # moleculas de agua
-SIDE0=${SIDE0:-21.0}              # lado inicial de la caja cubica (A)
+# La caja original de MDMix (17 ETA + 209 WAT, ~20 A) es demasiado pequena para el corte de 9 A:
+# pmemd aborta con "max pairlist cutoff must be less than unit cell max sphere radius" y pmemd.cuda
+# la rechaza. Por eso la caja se replica REP veces por lado (REP=2: 8x moleculas, ~40 A).
+# Las fracciones de mezcla no cambian.
+REP=${REP:-2}
+NETA=${NETA:-$(( 17 * REP * REP * REP ))}   # moleculas de etanol
+NWAT=${NWAT:-$(( 209 * REP * REP * REP ))}  # moleculas de agua
+SIDE0=${SIDE0:-$(awk "BEGIN{print 21.0*$REP}")}  # lado inicial de la caja cubica (A)
 TEMP=${TEMP:-300.0}               # K (valor por defecto de MDMix)
 NPT_NS=${NPT_NS:-10}              # duracion de la fase NPT (ns)
 DISCARD_NS=${DISCARD_NS:-2}       # ns de NPT que se descartan en el analisis
@@ -29,10 +34,10 @@ FF=${FF:-leaprc.protein.ff19SB}   # campo de fuerzas del soluto (ff19SB se disen
 UNIT=${UNIT:-ETAOPC20}            # nombre de la unidad caja en el .off final
 SRC_OFF=${SRC_OFF:-/mnt/data_ubuntu/mdmix/pymdmix/pyMDMix/data/solventlib/ETAWAT20.off}
 PMEMD_CPU=${PMEMD_CPU:-pmemd}
-# La caja es pequena (~20 A) y pmemd.cuda la rechaza ("Small box detected"), por lo que el NPT corre en CPU.
-# Por defecto usa pmemd serial (unos 50 ns/dia en este tamano). Para usar MPI, defina por ejemplo:
-#   NPT_CMD="mpirun -np 8 pmemd.MPI" bash build_eta_opc.sh 5
-NPT_CMD=${NPT_CMD:-$PMEMD_CPU}
+# Calentamiento y NPT en GPU. Si la caja es pequena (REP=1) use CPU: NPT_CMD=pmemd HEAT_CMD=pmemd
+PMEMD_GPU=${PMEMD_GPU:-pmemd.cuda}
+HEAT_CMD=${HEAT_CMD:-$PMEMD_GPU}
+NPT_CMD=${NPT_CMD:-$PMEMD_GPU}
 START=${1:-1}
 
 NSTEPS=$(( NPT_NS * 500000 ))     # dt = 2 fs
@@ -43,14 +48,14 @@ DISCARD_FR=$(( DISCARD_NS * 100 ))
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: no se encuentra '$1' en el PATH"; exit 1; }; }
 need tleap; need cpptraj; need packmol; need python
 command -v "$PMEMD_CPU" >/dev/null 2>&1 || PMEMD_CPU=sander
-need "$PMEMD_CPU"
+need "$PMEMD_CPU"; need "${HEAT_CMD%% *}"; need "${NPT_CMD%% *}"
 [ -f "$SRC_OFF" ] || { echo "ERROR: no existe SRC_OFF=$SRC_OFF"; exit 1; }
 python -c "import netCDF4, numpy" || { echo "ERROR: faltan netCDF4/numpy en este entorno"; exit 1; }
 [ -n "${AMBERHOME:-}" ] || { echo "ERROR: AMBERHOME no esta definido (source \$AMBERHOME/amber.sh)"; exit 1; }
 for f in "$FF" leaprc.water.opc; do
   [ -f "$AMBERHOME/dat/leap/cmd/$f" ] || { echo "ERROR: no existe $AMBERHOME/dat/leap/cmd/$f (ajusta FF=... o revisa tu instalacion)"; echo "Disponibles:"; ls "$AMBERHOME/dat/leap/cmd" | grep -E "^leaprc\.(protein|ff|water)" ; exit 1; }
 done
-echo ">> Etapa inicial: $START | $NETA ETA + $NWAT WAT | NPT ${NPT_NS} ns | UNIT=$UNIT"
+echo ">> Etapa inicial: $START | $NETA ETA + $NWAT WAT | caja inicial $SIDE0 A | NPT ${NPT_NS} ns | UNIT=$UNIT"
 
 run_stage() { [ "$START" -le "$1" ]; }
 
@@ -149,7 +154,7 @@ calentamiento NVT
  /
 EOF
 $PMEMD_CPU -O -i min.in  -o min.out  -p mix.parm7 -c mix.rst7  -r min.rst7
-$PMEMD_CPU -O -i heat.in -o heat.out -p mix.parm7 -c min.rst7  -r heat.rst7
+$HEAT_CMD -O -i heat.in -o heat.out -p mix.parm7 -c min.rst7  -r heat.rst7
 fi
 
 # ------------------------------ ETAPA 5 --------------------------------------

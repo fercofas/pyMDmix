@@ -50,11 +50,11 @@ nohup bash build_eta_opc.sh > build.log 2>&1 &
 tail -f build.log
 ```
 
-Etapas: (1) extrae el etanol de `ETAWAT20.off`; (2) obtiene una molécula de agua OPC con su sitio virtual `EPW`; (3) empaqueta con packmol y genera `mix.parm7` y `mix.rst7`; (4) minimiza y calienta; (5) equilibra 10 ns en NPT; (6) calcula densidad y caja; (7) escribe `ETAOPC20.off`.
+Con `REP=2`, las 1808 moléculas se equilibran 10 ns en pocos minutos en GPU. Etapas: (1) extrae el etanol de `ETAWAT20.off`; (2) obtiene una molécula de agua OPC con su sitio virtual `EPW`; (3) empaqueta con packmol y genera `mix.parm7` y `mix.rst7`; (4) minimiza y calienta; (5) equilibra 10 ns en NPT; (6) calcula densidad y caja; (7) escribe `ETAOPC20.off`.
 
 Notas:
 
-- La caja mide unos 20 Å, y `pmemd.cuda` la rechaza con el mensaje *Small box detected*. Por eso la etapa 5 corre en CPU con `pmemd` serial (unos 50 ns/día para este tamaño, es decir, unas 5 horas para 10 ns). Para usar MPI: `NPT_CMD="mpirun -np 8 pmemd.MPI" bash build_eta_opc.sh 5`.
+- La caja original de MDMix (17 ETA y 209 WAT, unos 20 Å) es demasiado pequeña para un corte de 9 Å: `pmemd` aborta con *max pairlist cutoff must be less than unit cell max sphere radius* y `pmemd.cuda` la rechaza con *Small box detected*. Por eso el script replica la caja `REP` veces por lado (por defecto `REP=2`: 136 ETA y 1672 WAT en unos 40 Å). Las fracciones de mezcla no cambian. El calentamiento y el NPT corren en GPU (`pmemd.cuda`); con `REP=1` hay que usar CPU: `REP=1 HEAT_CMD=pmemd NPT_CMD=pmemd`, y el corte tendría que bajarse.
 - Variables útiles: `FF` (por defecto `leaprc.protein.ff19SB`), `NPT_NS`, `TEMP`, `NETA`, `NWAT`, `SRC_OFF`.
 - Para reanudar desde una etapa: `bash build_eta_opc.sh 5`.
 - **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga 209 átomos `EPW`.
@@ -208,7 +208,7 @@ Salen un PDB con los hot spots y un archivo `.hset` (pickle) con el conjunto.
 | Síntoma | Causa y solución |
 |---|---|
 | `Could not open file leaprc.ff14SB` | Ese archivo ya no existe en AmberTools recientes. Usa `leaprc.protein.ff19SB` (valor por defecto en esta versión). |
-| `Small box detected` en `pmemd.cuda` | Caja de menos de tres celdas de hash. Ejecuta en CPU (`pmemd` o `pmemd.MPI`) o usa una caja mayor. |
+| `Small box detected` o `max pairlist cutoff must be less than unit cell max sphere radius` | La caja es demasiado pequeña para el corte de 9 Å. Usa una caja mayor (`REP=2` en el script de cajas). |
 | `mdmix` ejecuta un script de Python 2 | Hay otro `mdmix` en `~/.local/bin`. Activa el entorno `pymdmix3` o usa `python -m pyMDMix`. |
 | `AMBERHOME env variable not defined!` | Ejecuta `source $AMBERHOME/amber.sh` antes de usar `mdmix`. |
 | Conflictos de `numpy` con herramientas de AmberTools | Fija `numpy<2` y `biopython<1.86` (ya incluido en `environment.yml`). |
