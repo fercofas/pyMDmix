@@ -39,25 +39,17 @@ ls $AMBERHOME/dat/leap/cmd | grep -E "^leaprc\.(protein.ff19SB|gaff|water.opc)"
 
 Las cajas incluidas (`ETAWAT20` y las demás) están equilibradas con TIP3P. Para usar OPC hay que reconstruirlas y reequilibrarlas con ese modelo de agua. No hace falta reparametrizar los cosolventes: las cargas RESP y los parámetros GAFF del cosolvente no dependen del agua. Sí conviene validar densidad y agregación (sección 2.3).
 
-### 2.1 Construcción (etanol, 17 ETA + 209 WAT)
+### 2.1 Construcción
 
-El script `examples/solvent_boxes/build_eta_opc.sh` hace todo el proceso:
+El script `examples/solvent_boxes/build_box.sh` construye la caja de cualquiera de los cosolventes de la biblioteca (ETA, ANT, MAM, ISO, ISO5, MOH, PYR1, ION). El procedimiento completo, la calculadora de composiciones (`boxcalc.py`), la validación y los problemas frecuentes están en [TUTORIAL_CAJAS.md](TUTORIAL_CAJAS.md). Para etanol:
 
 ```bash
-mkdir -p ~/cajas/eta_opc && cd ~/cajas/eta_opc
-cp /ruta/a/pyMDmix/examples/solvent_boxes/build_eta_opc.sh .
-nohup bash build_eta_opc.sh > build.log 2>&1 &
+mkdir -p ~/cajas/ETA && cd ~/cajas/ETA
+nohup bash /ruta/a/pyMDmix/examples/solvent_boxes/build_box.sh ETA > build.log 2>&1 &
 tail -f build.log
 ```
 
-Con `REP=2`, las 1808 moléculas se equilibran 10 ns en pocos minutos en GPU. Etapas: (1) extrae el etanol de `ETAWAT20.off`; (2) obtiene una molécula de agua OPC con su sitio virtual `EPW`; (3) empaqueta con packmol y genera `mix.parm7` y `mix.rst7`; (4) minimiza y calienta; (5) equilibra 10 ns en NPT; (6) calcula densidad y caja; (7) escribe `ETAOPC20.off`.
-
-Notas:
-
-- La caja original de MDMix (17 ETA y 209 WAT, unos 20 Å) es demasiado pequeña para un corte de 9 Å: `pmemd` aborta con *max pairlist cutoff must be less than unit cell max sphere radius* y `pmemd.cuda` la rechaza con *Small box detected*. Por eso el script replica la caja `REP` veces por lado (por defecto `REP=2`: 136 ETA y 1672 WAT en unos 40 Å). Las fracciones de mezcla no cambian. El calentamiento y el NPT corren en GPU (`pmemd.cuda`); con `REP=1` hay que usar CPU: `REP=1 HEAT_CMD=pmemd NPT_CMD=pmemd`, y el corte tendría que bajarse.
-- Variables útiles: `FF` (por defecto `leaprc.protein.ff19SB`), `NPT_NS`, `TEMP`, `NETA`, `NWAT`, `SRC_OFF`.
-- Para reanudar desde una etapa: `bash build_eta_opc.sh 5`.
-- **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga tantos átomos `EPW` como aguas (1672 con `REP=2`).
+Con `REP=2` (el valor que el script elige para etanol) son 136 ETA y 1672 aguas en unos 40 Å, y los 10 ns de NPT toman pocos minutos en GPU. **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga tantos átomos `EPW` como aguas (1672 con `REP=2`).
 
 ### 2.2 Registrar el solvente
 

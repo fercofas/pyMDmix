@@ -65,7 +65,7 @@ Test the program works correctly:
 
 Tutorial
 --------
-A short Spanish tutorial (cajas de solvente OPC, creacion de proyectos, analisis) is in TUTORIAL.md.
+A short Spanish tutorial (cajas de solvente OPC, creacion de proyectos, analisis) is in TUTORIAL.md. The step-by-step guide to build mixed-solvent boxes with OPC water (build_box.sh, boxcalc.py) is in TUTORIAL_CAJAS.md.
 A complete project configuration template is in pyMDMix/data/templates/complete.cfg
 (`mdmix create template -f proyecto.cfg` copies it to the current folder).
 

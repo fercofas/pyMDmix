@@ -1,48 +1,89 @@
 #!/bin/bash
 # =============================================================================
-# Construccion de la caja ETANOL / AGUA OPC para pyMDMix
-#   17 etanoles + 209 aguas OPC (misma composicion que ETAWAT20, TIP3P)
+# Construccion de cajas COSOLVENTE / AGUA OPC para pyMDMix
 #
-# Uso (desde la carpeta de trabajo, con pymdmix3 y AMBER activados):
-#   bash build_eta_opc.sh            # corre todas las etapas
-#   bash build_eta_opc.sh 3          # reanuda desde la etapa 3
+# Uso (desde una carpeta de trabajo VACIA por solvente, con pymdmix3 y AMBER activados):
+#   mkdir ANT && cd ANT
+#   bash /ruta/a/build_box.sh ANT        # corre todas las etapas
+#   bash /ruta/a/build_box.sh ANT 5      # reanuda desde la etapa 5
+#
+# Cosolventes con perfil incluido: ETA ANT MAM ISO ISO5 MOH PYR1 ION
+# (composicion y lado tomados de las cajas TIP3P de pyMDMix/data/solventlib).
+# Para otro cosolvente (con parametros ya disponibles en un .off) define
+# COSOLV, SRC_OFF, COMP, NW0, SIDE_EQ, SOLV y UNIT por variables de entorno;
+# boxcalc.py calcula COMP y NW0 para un % v/v dado.
 #
 # Etapas:
-#   1  Extraer etanol (coordenadas y parametros) de ETAWAT20.off
+#   1  Extraer los cosolventes (coordenadas y parametros) del .off TIP3P
 #   2  Obtener una molecula de agua OPC (con sitio virtual EPW)
 #   3  Empaquetar con packmol y generar parm7/rst7 con tleap
-#   4  Minimizar y calentar (pmemd)
+#   4  Minimizar y calentar
 #   5  Equilibrar en NPT (GPU)
 #   6  Analizar densidad y caja, elegir el cuadro representativo
 #   7  Construir el .off final con tleap
+#   8  Escribir el .config del solvente y el RDF de agregacion
 # =============================================================================
 set -euo pipefail
 
+COSOLV=${1:-}
+START=${2:-1}
+[ -n "$COSOLV" ] || { echo "Uso: bash build_box.sh COSOLV [etapa_inicial]   (ETA ANT MAM ISO ISO5 MOH PYR1 ION)"; exit 1; }
+
+# ------------------------------ perfiles --------------------------------------
+# SRC: .off TIP3P de origen | CFG: .config original | COMP: residuos cosolvente:numero (caja original)
+# NW0: aguas de la caja original | SIDE_EQ: lado equilibrado (A) de la caja original
+# SOLV: nombre del solvente nuevo | UNIT: unidad caja nueva | RDFA/RDFB: mascaras para el RDF cosolvente-cosolvente
+case "$COSOLV" in
+  ETA)  P_SRC=ETAWAT20.off;    P_CFG=eta.config;  P_COMP="ETA:17";           P_NW0=209; P_SIDE=19.99; P_SOLV=ETAO;  P_UNIT=ETAOPC20; P_RDFA=":ETA@O1"; P_RDFB=":ETA@O1";;
+  ANT)  P_SRC=ANTWAT20.off;    P_CFG=ant.config;  P_COMP="ANT:17";           P_NW0=209; P_SIDE=19.86; P_SOLV=ANTO;  P_UNIT=ANTOPC20; P_RDFA=":ANT@N1"; P_RDFB=":ANT@N1";;
+  MAM)  P_SRC=MAMWAT20.off;    P_CFG=mam.config;  P_COMP="MAM:18";           P_NW0=209; P_SIDE=19.85; P_SOLV=MAMO;  P_UNIT=MAMOPC20; P_RDFA=":MAM@O1"; P_RDFB=":MAM@O1";;
+  ISO)  P_SRC=ISOWAT20.off;    P_CFG=iso.config;  P_COMP="ISO:14";           P_NW0=209; P_SIDE=20.06; P_SOLV=ISOO;  P_UNIT=ISOOPC20; P_RDFA=":ISO@O1"; P_RDFB=":ISO@O1";;
+  ISO5) P_SRC=ISOWAT5_ok.off;  P_CFG=iso5.config; P_COMP="ISO:4";            P_NW0=310; P_SIDE=21.41; P_SOLV=ISO5O; P_UNIT=ISOOPC5;  P_RDFA=":ISO@O1"; P_RDFB=":ISO@O1";;
+  MOH)  P_SRC=MOHWAT20.off;    P_CFG=moh.config;  P_COMP="MOH:56";           P_NW0=470; P_SIDE=26.23; P_SOLV=MOHO;  P_UNIT=MOHOPC20; P_RDFA=":MOH@O1"; P_RDFB=":MOH@O1";;
+  PYR1) P_SRC=PYRWAT1.off;     P_CFG=pyr1.config; P_COMP="PYR:1";            P_NW0=438; P_SIDE=23.65; P_SOLV=PYR1O; P_UNIT=PYROPC1;  P_RDFA=":PYR@N1"; P_RDFB=":PYR@N1";;
+  ION)  P_SRC=IONWAT20.off;    P_CFG=ion.config;  P_COMP="CN3:12 COO:12";   P_NW0=315; P_SIDE=22.17; P_SOLV=IONO;  P_UNIT=IONOPC20; P_RDFA=":CN3@N1"; P_RDFB=":COO@O1";;
+  *)    P_SRC=; P_CFG=; P_COMP=; P_NW0=; P_SIDE=; P_SOLV=; P_UNIT=; P_RDFA=; P_RDFB=;;
+esac
+
 # ---------------------------- parametros -------------------------------------
-# La caja original de MDMix (17 ETA + 209 WAT, ~20 A) es demasiado pequena para el corte de 9 A:
-# pmemd aborta con "max pairlist cutoff must be less than unit cell max sphere radius" y pmemd.cuda
-# la rechaza. Por eso la caja se replica REP veces por lado (REP=2: 8x moleculas, ~40 A).
-# Las fracciones de mezcla no cambian.
-REP=${REP:-2}
-NETA=${NETA:-$(( 17 * REP * REP * REP ))}   # moleculas de etanol
-NWAT=${NWAT:-$(( 209 * REP * REP * REP ))}  # moleculas de agua
-SIDE0=${SIDE0:-$(awk "BEGIN{print 21.0*$REP}")}  # lado inicial de la caja cubica (A)
-TEMP=${TEMP:-300.0}               # K (valor por defecto de MDMix)
+# Cualquier variable puede sobrescribirse desde el entorno (por ejemplo REP=3 NPT_NS=20).
+SRC_DIR=${SRC_DIR:-$(python -c "import os, pyMDMix; print(os.path.join(os.path.dirname(pyMDMix.__file__), 'data', 'solventlib'))" 2>/dev/null || echo "")}
+SRC_OFF=${SRC_OFF:-$SRC_DIR/$P_SRC}
+CFG_SRC=${CFG_SRC:-$SRC_DIR/$P_CFG}
+COMP=${COMP:-$P_COMP}              # "RES:n RES:n" para la caja ORIGINAL (sin replicar)
+NW0=${NW0:-$P_NW0}
+SIDE_EQ=${SIDE_EQ:-$P_SIDE}        # lado de la caja original equilibrada (A)
+SOLV=${SOLV:-$P_SOLV}              # nombre del solvente en pyMDMix
+UNIT=${UNIT:-$P_UNIT}              # nombre de la unidad caja en el .off final
+RDFA=${RDFA:-$P_RDFA}
+RDFB=${RDFB:-$P_RDFB}
+for v in SRC_OFF COMP NW0 SIDE_EQ SOLV UNIT; do
+  [ -n "${!v}" ] || { echo "ERROR: perfil '$COSOLV' desconocido o falta $v. Define $v en el entorno."; exit 1; }
+done
+# Un lado minimo de ~36 A para el corte de 9 A (pmemd exige radio de esfera > corte + 2 A y
+# pmemd.cuda rechaza cajas pequenas). Se replica la caja original REP veces por lado; la
+# composicion no cambia.
+REP=${REP:-$(awk "BEGIN{r=int(36.0/$SIDE_EQ); if (r*$SIDE_EQ<36.0) r++; if (r<1) r=1; print r}")}
+R3=$(( REP * REP * REP ))
+NWAT=$(( NW0 * R3 ))
+SIDE0=${SIDE0:-$(awk "BEGIN{printf \"%.2f\", $SIDE_EQ*1.05*$REP}")}   # caja inicial algo mas holgada
+TEMP=${TEMP:-300.0}               # K
 NPT_NS=${NPT_NS:-10}              # duracion de la fase NPT (ns)
 DISCARD_NS=${DISCARD_NS:-2}       # ns de NPT que se descartan en el analisis
-FF=${FF:-leaprc.protein.ff19SB}   # campo de fuerzas del soluto (ff19SB se diseno para usarse con OPC)
-UNIT=${UNIT:-ETAOPC20}            # nombre de la unidad caja en el .off final
-SRC_OFF=${SRC_OFF:-/mnt/data_ubuntu/mdmix/pymdmix/pyMDMix/data/solventlib/ETAWAT20.off}
+# Campos de fuerza del soluto: ff19SB (se diseno para usarse con OPC) y gaff (cosolventes organicos)
+FFS=${FFS:-"leaprc.protein.ff19SB leaprc.gaff"}
 PMEMD_CPU=${PMEMD_CPU:-pmemd}
 # Calentamiento y NPT en GPU. Si la caja es pequena (REP=1) use CPU: NPT_CMD=pmemd HEAT_CMD=pmemd
 PMEMD_GPU=${PMEMD_GPU:-pmemd.cuda}
 HEAT_CMD=${HEAT_CMD:-$PMEMD_GPU}
 NPT_CMD=${NPT_CMD:-$PMEMD_GPU}
-START=${1:-1}
 
 NSTEPS=$(( NPT_NS * 500000 ))     # dt = 2 fs
 NFRAMES=$(( NPT_NS * 100 ))       # un cuadro cada 10 ps
 DISCARD_FR=$(( DISCARD_NS * 100 ))
+RESLIST=$(for c in $COMP; do echo -n "${c%%:*} "; done)
+SRC_LINES=$(for f in $FFS; do echo "source $f"; done)
+LOAD_LIBS=$(for r in $RESLIST; do echo "loadOff $r.lib"; done)
 
 # ---------------------------- verificaciones ---------------------------------
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: no se encuentra '$1' en el PATH"; exit 1; }; }
@@ -52,32 +93,37 @@ need "$PMEMD_CPU"; need "${HEAT_CMD%% *}"; need "${NPT_CMD%% *}"
 [ -f "$SRC_OFF" ] || { echo "ERROR: no existe SRC_OFF=$SRC_OFF"; exit 1; }
 python -c "import netCDF4, numpy" || { echo "ERROR: faltan netCDF4/numpy en este entorno"; exit 1; }
 [ -n "${AMBERHOME:-}" ] || { echo "ERROR: AMBERHOME no esta definido (source \$AMBERHOME/amber.sh)"; exit 1; }
-for f in "$FF" leaprc.water.opc; do
-  [ -f "$AMBERHOME/dat/leap/cmd/$f" ] || { echo "ERROR: no existe $AMBERHOME/dat/leap/cmd/$f (ajusta FF=... o revisa tu instalacion)"; echo "Disponibles:"; ls "$AMBERHOME/dat/leap/cmd" | grep -E "^leaprc\.(protein|ff|water)" ; exit 1; }
+for f in $FFS leaprc.water.opc; do
+  [ -f "$AMBERHOME/dat/leap/cmd/$f" ] || { echo "ERROR: no existe $AMBERHOME/dat/leap/cmd/$f (ajusta FFS=... o revisa tu instalacion)"; echo "Disponibles:"; ls "$AMBERHOME/dat/leap/cmd" | grep -E "^leaprc\.(protein|ff|gaff|water)" ; exit 1; }
 done
-echo ">> Etapa inicial: $START | $NETA ETA + $NWAT WAT | caja inicial $SIDE0 A | NPT ${NPT_NS} ns | UNIT=$UNIT"
+COMPTXT=$(for c in $COMP; do echo -n "$(( ${c##*:} * R3 )) ${c%%:*} + "; done)
+echo ">> $COSOLV | Etapa inicial: $START | REP=$REP | ${COMPTXT}$NWAT WAT | caja inicial $SIDE0 A | NPT ${NPT_NS} ns | $SOLV / $UNIT"
 
 run_stage() { [ "$START" -le "$1" ]; }
 
 # ------------------------------ ETAPA 1 --------------------------------------
 if run_stage 1; then
-echo "== Etapa 1: extraer etanol de $SRC_OFF"
-cat > 1_eta.leap << EOF
-source $FF
-loadOff $SRC_OFF
-savePdb ETA eta.pdb
-saveOff ETA eta.lib
-quit
-EOF
-tleap -f 1_eta.leap > 1_eta.log || { echo "ERROR: tleap fallo con 1_eta.leap, revisa 1_eta.log"; tail -5 1_eta.log; exit 1; }
-[ -s eta.pdb ] && [ -s eta.lib ] || { echo "ERROR etapa 1: revisa 1_eta.log"; exit 1; }
+echo "== Etapa 1: extraer cosolvente(s) [$RESLIST] de $SRC_OFF"
+{
+  echo "$SRC_LINES"
+  echo "loadOff $SRC_OFF"
+  for r in $RESLIST; do
+    echo "savePdb $r $r.pdb"
+    echo "saveOff $r $r.lib"
+  done
+  echo "quit"
+} > 1_cosolv.leap
+tleap -f 1_cosolv.leap > 1_cosolv.log || { echo "ERROR: tleap fallo con 1_cosolv.leap, revisa 1_cosolv.log"; tail -5 1_cosolv.log; exit 1; }
+for r in $RESLIST; do
+  [ -s $r.pdb ] && [ -s $r.lib ] || { echo "ERROR etapa 1: falta $r.pdb o $r.lib (el residuo $r no esta en $SRC_OFF?). Revisa 1_cosolv.log"; exit 1; }
+done
 fi
 
 # ------------------------------ ETAPA 2 --------------------------------------
 if run_stage 2; then
 echo "== Etapa 2: molecula de agua OPC"
 cat > 2_wat.leap << EOF
-source $FF
+$SRC_LINES
 source leaprc.water.opc
 savePdb WAT wat_opc.pdb
 quit
@@ -94,6 +140,9 @@ fi
 # ------------------------------ ETAPA 3 --------------------------------------
 if run_stage 3; then
 echo "== Etapa 3: empaquetar y construir topologia"
+PACK_BLOCKS=$(for c in $COMP; do
+  printf 'structure %s.pdb\n  number %d\n  inside box 0. 0. 0. %s %s %s\nend structure\n\n' "${c%%:*}" $(( ${c##*:} * R3 )) $SIDE0 $SIDE0 $SIDE0
+done)
 cat > mix.inp << EOF
 tolerance 2.0
 filetype pdb
@@ -101,11 +150,7 @@ output mix_packed.pdb
 add_amber_ter
 seed 12345
 
-structure eta.pdb
-  number $NETA
-  inside box 0. 0. 0. $SIDE0 $SIDE0 $SIDE0
-end structure
-
+$PACK_BLOCKS
 structure wat_opc.pdb
   number $NWAT
   inside box 0. 0. 0. $SIDE0 $SIDE0 $SIDE0
@@ -115,9 +160,9 @@ packmol < mix.inp > 3_packmol.log
 grep -q "Success" 3_packmol.log || { echo "ERROR etapa 3: packmol no convergio (ver 3_packmol.log)"; exit 1; }
 
 cat > 3_build.leap << EOF
-source $FF
+$SRC_LINES
 source leaprc.water.opc
-loadOff eta.lib
+$LOAD_LIBS
 mix = loadPdb mix_packed.pdb
 set mix box { $SIDE0 $SIDE0 $SIDE0 }
 check mix
@@ -241,19 +286,67 @@ echo "   sitios virtuales EPW en best.pdb: $NEP (esperados: $NWAT)"
 [ "$NEP" -eq "$NWAT" ] || { echo "ERROR: el numero de EPW no coincide"; exit 1; }
 
 cat > 7_off.leap << EOF
-source $FF
+$SRC_LINES
 source leaprc.water.opc
-loadOff eta.lib
+$LOAD_LIBS
 $UNIT = loadPdb best.pdb
 set $UNIT box { $BA $BB $BC }
 check $UNIT
-saveOff { ETA WAT $UNIT } $UNIT.off
+saveOff { $RESLIST WAT $UNIT } $UNIT.off
 quit
 EOF
 tleap -f 7_off.leap > 7_off.log || { echo "ERROR: tleap fallo con 7_off.leap, revisa 7_off.log"; tail -5 7_off.log; exit 1; }
 [ -s $UNIT.off ] || { echo "ERROR etapa 7: tleap no escribio $UNIT.off (revisa 7_off.log; si rechazo la lista de unidades, avisame)"; exit 1; }
 echo "   unidades guardadas en $UNIT.off:"
-sed -n '2,5p' $UNIT.off
+sed -n '2,8p' $UNIT.off | grep -v '^!'
 echo
 echo "LISTO: $UNIT.off. Caja: $BA x $BB x $BC A."
+fi
+
+# ------------------------------ ETAPA 8 --------------------------------------
+if run_stage 8; then
+echo "== Etapa 8: archivo .config del solvente y RDF de agregacion"
+if [ -f "$CFG_SRC" ]; then
+python - "$CFG_SRC" "$SOLV" "$UNIT" "$UNIT.off" > "$SOLV.config" << 'PYEOF'
+import re, sys
+src, solv, unit, off = sys.argv[1:5]
+lines = open(src).read().split('\n')
+out, seen_wm, last_box = [], False, None
+for l in lines:
+    if re.match(r'\s*name\s*=', l):         l = 'name = %s' % solv
+    elif re.match(r'\s*info\s*=', l):       l = re.sub(r'\s+$', '', l) + ' in OPC water'
+    elif re.match(r'\s*objectfile\s*=', l): l = 'objectfile = %s' % off
+    elif re.match(r'\s*boxunit\s*=', l):    l = 'boxunit = %s' % unit; last_box = len(out)
+    elif re.match(r'\s*watermodel\s*=', l): l = 'watermodel = OPC'; seen_wm = True
+    out.append(l)
+if not seen_wm and last_box is not None:
+    out.insert(last_box + 1, 'watermodel = OPC')
+print('\n'.join(out))
+PYEOF
+echo "   escrito $SOLV.config (revisa name, objectfile, boxunit, watermodel y PROBES)"
+else
+echo "   AVISO: no se encontro $CFG_SRC; escribe el .config a mano (ver TUTORIAL_CAJAS.md)"
+fi
+if [ -f npt.nc ]; then
+cat > 8_rdf.in << EOF
+parm mix.parm7
+trajin npt.nc $(( DISCARD_FR + 1 )) last
+rdf cc $RDFA $RDFB 0.1 12.0 out rdf_cosolv_cosolv.dat
+rdf cw $RDFA :WAT@O 0.1 12.0 out rdf_cosolv_wat.dat
+EOF
+cpptraj -i 8_rdf.in > 8_rdf.log 2>&1 || { echo "ERROR etapa 8: cpptraj fallo, revisa 8_rdf.log"; tail -5 8_rdf.log; exit 1; }
+python - << 'PYEOF'
+import numpy as np
+for f, lab in (('rdf_cosolv_cosolv.dat', 'cosolvente-cosolvente'), ('rdf_cosolv_wat.dat', 'cosolvente-agua (O)')):
+    d = np.loadtxt(f)
+    r, g = d[:, 0], d[:, 1]
+    m = (r > 2.0) & (r < 6.0)
+    k = np.argmax(np.where(m, g, -1))
+    tail = g[r > 9.0].mean()
+    print('   RDF %-22s primer maximo: g=%.2f en r=%.1f A | media g(9-12 A)=%.2f (esperado ~1)' % (lab, g[k], r[k], tail))
+PYEOF
+echo "   Referencia: un g(r) cosolvente-cosolvente con maximo alto (> 3) en r < 5 A sugiere agregacion."
+fi
+echo
+echo "SIGUIENTE: mdmix create solvents -f $SOLV.config   (con $UNIT.off en la misma carpeta)"
 fi

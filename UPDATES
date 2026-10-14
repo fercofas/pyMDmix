@@ -59,3 +59,5 @@ UPDATE HISTORY (ZIP)
 - Neutralization with NaCl loads leaprc.water.opc / leaprc.water.opc3 when the solvent water model is OPC / OPC3.
 - Default Amber force field is now leaprc.protein.ff19SB (leaprc.ff14SB no longer exists in recent AmberTools); recommended together with leaprc.water.opc.
 - Added TUTORIAL.md, a complete project template (pyMDMix/data/templates/complete.cfg, used by "mdmix create template"), environment.yml with packmol and pinned numpy/biopython, and examples/solvent_boxes (OPC solvent box builder).
+- examples/solvent_boxes: build_box.sh builds OPC boxes for ETA, ANT, MAM, ISO, ISO5, MOH, PYR1 and ION (replaces build_eta_opc.sh); boxcalc.py is a composition calculator (replaces the molecule_calculator spreadsheet); eta_opc.config registers the validated ethanol/OPC box (ETAO). Step-by-step guide in TUTORIAL_CAJAS.md.
+- Solvent configuration parser: InvalidPath now reports which objectfile/frcmod was not found.
