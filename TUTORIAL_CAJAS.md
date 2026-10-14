@@ -157,3 +157,97 @@ En la réplica creada, `tleap` debe cargar `leaprc.water.opc` y la topología de
 | El número de `EPW` no coincide | El PDB se escribió sin `include_ep`, o el residuo de agua no es `WAT`. |
 | Aviso de `tleap` con "Errors = N" distinto de 0 | Revisa `3_build.log` antes de seguir. |
 | La densidad no converge | Alarga el NPT con `NPT_NS=20` y aumenta `DISCARD_NS`. |
+
+## 9. Sondas nuevas: parametrización con ORCA y Multiwfn
+
+Esta sección parametriza un cosolvente que no está en la biblioteca (benceno, isobutano, imidazol, acetaldehído, guanidinio, metilfosfato u otros). Produce la unidad Amber con cargas RESP y los parámetros GAFF que falten, y luego se construye la caja como en la sección 4.
+
+### 9.1 Programas necesarios
+
+| Programa | Uso | Obtención |
+|---|---|---|
+| ORCA 6.x | optimización HF/6-31G* y ESP | descarga con cuenta académica en el foro de ORCA; `tar -xJf orca_*.tar.xz` |
+| Multiwfn | ajuste RESP de dos etapas | descarga desde la página de Multiwfn; `unzip` |
+| AmberTools | `antechamber`, `parmchk2`, `tleap` | ya instalado |
+| RDKit (o Open Babel) | SMILES a estructura 3D | `python -m pip install rdkit` en el entorno `pymdmix3` |
+
+Notas de instalación:
+
+- En Ubuntu existe `/usr/bin/orca`, que es el lector de pantalla de GNOME y no el programa de química cuántica. No pongas ORCA en el PATH con ese nombre. Define una variable y usa la ruta completa:
+
+```bash
+export ORCA_HOME=/ruta/a/orca_6_1_1_linux_x86-64_shared_openmpi418_nodmrg
+export LD_LIBRARY_PATH=$ORCA_HOME:$LD_LIBRARY_PATH
+$ORCA_HOME/orca entrada.inp > salida.out
+```
+
+- Multiwfn necesita pila ilimitada: `ulimit -s unlimited` y `export KMP_STACKSIZE=200M` (el script lo hace).
+- Comprobación de ORCA: una molécula de agua en HF/6-31G* debe dar -76.0090 Eh y terminar con `ORCA TERMINATED NORMALLY`.
+
+### 9.2 Una sonda
+
+```bash
+conda activate pymdmix3
+source $AMBERHOME/amber.sh
+python -m pip install rdkit            # una sola vez
+bash examples/solvent_boxes/make_probe.sh BNZ "c1ccccc1"
+```
+
+Argumentos: nombre del residuo (1 a 4 caracteres en mayúsculas), SMILES o archivo `.xyz`, carga neta y multiplicidad (opcionales; 0 y 1 por defecto). El script:
+
+1. genera la estructura 3D (RDKit, MMFF);
+2. optimiza en HF/6-31G* con ORCA y calcula la función de onda;
+3. ajusta RESP de dos etapas con Multiwfn y promedia las cargas de átomos topológicamente equivalentes (formas de resonancia incluidas);
+4. asigna tipos GAFF con `antechamber` leyendo esas cargas, genera el `frcmod` con `parmchk2` y avisa si `parmchk2` marcó parámetros con `ATTN`;
+5. guarda `NOMBRE.off` con la unidad y los parámetros nuevos (objeto `NOMBREparms`).
+
+Con `QM_ONLY=1` se detiene tras las cargas, y si `NOMBRE_opt.xyz` y `NOMBRE.charges` ya existen se salta la parte cuántica.
+
+### 9.3 Varias sondas
+
+```bash
+mkdir -p ~/cajas/probes && cd ~/cajas/probes
+nohup bash /ruta/a/examples/solvent_boxes/run_probes.sh > run_probes.log 2>&1 &
+```
+
+`run_probes.sh` procesa en serie benceno (BNZ), isobutano (IBN), imidazol (IMD), acetaldehído (ACD), guanidinio (GDM, carga +1) y metilfosfato (MPH, monoanión). Con `PROBES="BNZ IBN"` se elige un subconjunto. Al final imprime un resumen con `OK` o `FALLO` por sonda.
+
+### 9.4 Validación del protocolo
+
+El protocolo se comprobó con etanol (HF/6-31G*, conformero trans, ORCA 6.1.1 y Multiwfn 2026.10.1) contra las cargas de la unidad ETA de `ETAWAT20.off`:
+
+| Átomo | Biblioteca | Este protocolo |
+|---|---|---|
+| C1 (CH3) | -0.250 | -0.271 |
+| C2 (CH2) | 0.519 | 0.537 |
+| O1 | -0.711 | -0.706 |
+| H1 (OH) | 0.415 | 0.411 |
+| H2, H3 (CH2) | -0.082 | -0.089 |
+| H4 a H6 (CH3) | 0.064 | 0.069 |
+
+Las diferencias son de 0.02 e como máximo. El conformero gauche (0.09 kcal/mol más alto) da cargas que difieren más (hasta 0.07 e en el carbono metílico), de modo que la dependencia del conformero es mayor que la diferencia con la biblioteca.
+
+### 9.5 Limitaciones
+
+- Un solo conformero. En moléculas con rotores o grupos OH conviene ajustar varios conformeros con pesos; esta primera versión no lo hace.
+- RESP en fase gas con HF/6-31G*, que es la convención de Amber. Para aniones (metilfosfato) y cationes la fase gas es una aproximación; los dianiones (fosfato a pH 7) son problemáticos sin funciones difusas y no se incluyen.
+- El estado de protonación es una decisión del usuario. El metilfosfato se parametriza como monoanión.
+- El benceno y el isobutano no son miscibles con agua al 20 %. Se usan a baja concentración con `boxcalc.py dilute`:
+
+```bash
+python boxcalc.py dilute BENZ --molar 0.25 --side 40
+```
+
+### 9.6 Construir la caja de la sonda
+
+Usa `NOMBRE.off`, el nombre de los objetos y las cuentas de `boxcalc.py` en las variables de `build_box.sh` (sección 4.1). Por ejemplo, para benceno a 0.25 M en 40 Å:
+
+```bash
+mkdir -p ~/cajas/BNZ && cd ~/cajas/BNZ
+COSOLV=BNZ SRC_OFF=~/cajas/probes/BNZ/BNZ.off PARMS=BNZparms \
+COMP="BNZ:10" NW0=2091 SIDE_EQ=40 REP=1 \
+SOLV=BNZO UNIT=BNZOPC025 CFG_SRC= RDFA=":BNZ@C1" RDFB=":BNZ@C1" \
+bash /ruta/a/build_box.sh BNZ
+```
+
+Como no hay `.config` de origen, el script no genera `BNZO.config`; hay que escribirlo (sección 6 y `examples/solvent_boxes/eta_opc.config`), con sondeos propios de la molécula (por ejemplo, `BNZ=BNZ@C1,C2,C3,C4,C5,C6` y tipo `Arom`).

@@ -17,6 +17,8 @@ Subcomandos
                                      concentracion real de una composicion dada
   molar  COSOLV --molarity 7 --volume 0.1
                                      gramos y mililitros para una solucion de molaridad dada
+  dilute COSOLV --molar 0.25 --side 40
+                                     moleculas para una concentracion molar baja (sondas apolares)
   library                            concentracion real de las cajas incluidas en pyMDMix
 
 Ejemplos
@@ -68,6 +70,8 @@ COSOLVENTS = {
     'ANT':  ('Acetonitrile',                   0.786, 41.05,   'lit'),
     'MAM':  ('Acetamide',                      1.159, 59.07,   'lit'),
     'PYR':  ('Pyridine',                       0.982, 79.10,   'lit'),
+    'IBN':  ('Isobutane (liquido, ~0 C)',      0.551, 58.12,   'lit'),
+    'ACD':  ('Acetaldehyde',                   0.784, 44.05,   'lit'),
 }
 
 # Cajas incluidas en pyMDMix/data/solventlib: (cosolvente, n cosolvente, n agua, lado A)
@@ -167,6 +171,21 @@ def cmd_molar(a):
     print('Volumen del cosolvente puro: %.2f mL (%.1f %% v/v si fuera aditivo)' % (ml, 100.0 * ml / (a.volume * 1000.0)))
 
 
+def cmd_dilute(a):
+    """Caja con un cosolvente a concentracion molar baja: n = M * V; el resto es agua."""
+    _, rho, mw, _ = get(a.cosolv)
+    side = a.side * a.rep
+    vbox = side ** 3
+    nco = a.molar * NA * vbox * 1e-27
+    vco = nco * v_mol(rho, mw)
+    nwat = (vbox - vco) / V_WAT
+    nco_i, nwat_i = max(1, round(nco)), round(nwat)
+    print('Objetivo: %.3f M de %s en una caja de %.2f A (%.0f A^3)' % (a.molar, a.cosolv.upper(), side, vbox))
+    print('   cosolvente: %.2f -> %d | agua: %.1f -> %d' % (nco, nco_i, nwat, nwat_i))
+    show(nco_i, nwat_i, side, rho, mw, label='Composicion redondeada: ')
+    print('Para build_box.sh: COMP="NOMBRE:%d" NW0=%d SIDE_EQ=%.2f REP=1' % (nco_i, nwat_i, side))
+
+
 def cmd_library(a):
     print('Concentracion real de las cajas incluidas (volumenes de componentes puros)')
     for name, (code, nco, nwat, side) in LIBRARY.items():
@@ -200,6 +219,12 @@ def main():
     s.add_argument('--molarity', type=float, required=True); s.add_argument('--volume', type=float, required=True, help='litros')
     s.add_argument('--density', type=float); s.add_argument('--mw', type=float)
     s.set_defaults(f=cmd_molar)
+
+    s = sub.add_parser('dilute'); s.add_argument('cosolv')
+    s.add_argument('--molar', type=float, required=True, help='concentracion deseada (mol/L)')
+    s.add_argument('--side', type=float, required=True, help='lado de la caja (A)')
+    s.add_argument('--rep', type=int, default=1)
+    s.set_defaults(f=cmd_dilute)
 
     sub.add_parser('library').set_defaults(f=cmd_library)
 
