@@ -54,7 +54,7 @@ Etapas: (1) extrae el etanol de `ETAWAT20.off`; (2) obtiene una molécula de agu
 
 Notas:
 
-- La caja mide unos 20 Å, y `pmemd.cuda` la rechaza con el mensaje *Small box detected*. Por eso la etapa 5 corre en CPU (`pmemd.MPI` con `NCPU` procesos si existe `mpirun`; si no, `pmemd`). Puedes elegir el comando con `NPT_CMD="mpirun -np 16 pmemd.MPI"`.
+- La caja mide unos 20 Å, y `pmemd.cuda` la rechaza con el mensaje *Small box detected*. Por eso la etapa 5 corre en CPU con `pmemd` serial (unos 50 ns/día para este tamaño, es decir, unas 5 horas para 10 ns). Para usar MPI: `NPT_CMD="mpirun -np 8 pmemd.MPI" bash build_eta_opc.sh 5`.
 - Variables útiles: `FF` (por defecto `leaprc.protein.ff19SB`), `NPT_NS`, `TEMP`, `NETA`, `NWAT`, `SRC_OFF`.
 - Para reanudar desde una etapa: `bash build_eta_opc.sh 5`.
 - **Verificar**: que `6_analysis.log` muestre una deriva de densidad cercana a cero entre la primera y la segunda mitad, y que `best.pdb` contenga 209 átomos `EPW`.
@@ -208,7 +208,7 @@ Salen un PDB con los hot spots y un archivo `.hset` (pickle) con el conjunto.
 | Síntoma | Causa y solución |
 |---|---|
 | `Could not open file leaprc.ff14SB` | Ese archivo ya no existe en AmberTools recientes. Usa `leaprc.protein.ff19SB` (valor por defecto en esta versión). |
-| `Small box detected` en `pmemd.cuda` | Caja de menos de tres celdas de hash. Ejecuta en CPU (`pmemd.MPI`) o usa una caja mayor. |
+| `Small box detected` en `pmemd.cuda` | Caja de menos de tres celdas de hash. Ejecuta en CPU (`pmemd` o `pmemd.MPI`) o usa una caja mayor. |
 | `mdmix` ejecuta un script de Python 2 | Hay otro `mdmix` en `~/.local/bin`. Activa el entorno `pymdmix3` o usa `python -m pyMDMix`. |
 | `AMBERHOME env variable not defined!` | Ejecuta `source $AMBERHOME/amber.sh` antes de usar `mdmix`. |
 | Conflictos de `numpy` con herramientas de AmberTools | Fija `numpy<2` y `biopython<1.86` (ya incluido en `environment.yml`). |

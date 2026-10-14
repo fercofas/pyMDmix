@@ -30,15 +30,9 @@ UNIT=${UNIT:-ETAOPC20}            # nombre de la unidad caja en el .off final
 SRC_OFF=${SRC_OFF:-/mnt/data_ubuntu/mdmix/pymdmix/pyMDMix/data/solventlib/ETAWAT20.off}
 PMEMD_CPU=${PMEMD_CPU:-pmemd}
 # La caja es pequena (~20 A) y pmemd.cuda la rechaza ("Small box detected"), por lo que el NPT corre en CPU.
-# Por defecto usa pmemd.MPI con NCPU procesos si existen mpirun y pmemd.MPI; si no, pmemd serial.
-NCPU=${NCPU:-8}
-if [ -z "${NPT_CMD:-}" ]; then
-  if command -v mpirun >/dev/null 2>&1 && command -v pmemd.MPI >/dev/null 2>&1; then
-    NPT_CMD="mpirun -np $NCPU pmemd.MPI"
-  else
-    NPT_CMD="$PMEMD_CPU"
-  fi
-fi
+# Por defecto usa pmemd serial (unos 50 ns/dia en este tamano). Para usar MPI, defina por ejemplo:
+#   NPT_CMD="mpirun -np 8 pmemd.MPI" bash build_eta_opc.sh 5
+NPT_CMD=${NPT_CMD:-$PMEMD_CPU}
 START=${1:-1}
 
 NSTEPS=$(( NPT_NS * 500000 ))     # dt = 2 fs
@@ -129,7 +123,7 @@ EOF
 tleap -f 3_build.leap > 3_build.log || { echo "ERROR: tleap fallo con 3_build.leap, revisa 3_build.log"; tail -5 3_build.log; exit 1; }
 [ -s mix.parm7 ] && [ -s mix.rst7 ] || { echo "ERROR etapa 3: revisa 3_build.log"; exit 1; }
 echo "   carga total reportada por tleap:"; grep -i "total unperturbed charge\|Total perturbed charge" 3_build.log || true
-grep -i "error\|fatal" 3_build.log && { echo "AVISO: tleap reporto errores, revisa 3_build.log"; } || true
+grep -E "Errors = [1-9]|Fatal Error|FATAL" 3_build.log && { echo "AVISO: tleap reporto errores, revisa 3_build.log"; } || true
 fi
 
 # ------------------------------ ETAPA 4 --------------------------------------
