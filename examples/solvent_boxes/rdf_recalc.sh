@@ -5,8 +5,8 @@ A=${1:?mascara A}; B=${2:-$1}; F=${3:-201}
 cat > rdf_recalc.in << IN
 parm mix.parm7
 trajin npt.nc $F last
-radial out rdf_cosolv_cosolv.dat 0.1 12.0 $A $B
-radial out rdf_cosolv_wat.dat 0.1 12.0 :WAT@O $A
+radial out rdf_cosolv_cosolv.dat 0.1 12.0 volume $A $B
+radial out rdf_cosolv_wat.dat 0.1 12.0 volume :WAT@O $A
 IN
 cpptraj -i rdf_recalc.in > rdf_recalc.log 2>&1 || { tail -5 rdf_recalc.log; exit 1; }
 python - << 'PY'
