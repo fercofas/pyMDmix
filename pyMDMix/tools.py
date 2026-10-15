@@ -50,6 +50,18 @@ from biskit.tools import *
 
 import biskit.tools as _bt
 
+def create_tree(base, files, verbose=False):
+    """
+    Create the folder *base* and the folders needed to hold each path in *files* (relative to *base*).
+    Replacement for distutils.dir_util.create_tree, removed in Python 3.12.
+    """
+    dirs = {osp.join(base, osp.dirname(f)) if osp.dirname(f) else base for f in files}
+    dirs.add(base)
+    for d in sorted(dirs):
+        if not osp.isdir(d):
+            if verbose: print("creating %s" % d)
+            os.makedirs(d, exist_ok=True)
+
 def tryRemove(f, verbose=0, tree=0, wildcard=0):
     """
     Same as :func:`biskit.tools.tryRemove`, but if the process is currently inside the folder that is
