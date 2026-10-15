@@ -48,6 +48,28 @@ if DISABLE_BISKIT_LOADING_WARNS:
 
 from biskit.tools import *
 
+import biskit.tools as _bt
+
+def tryRemove(f, verbose=0, tree=0, wildcard=0):
+    """
+    Same as :func:`biskit.tools.tryRemove`, but if the process is currently inside the folder that is
+    going to be removed (tests and replica creation chdir into their work folders), first move to its
+    parent. Otherwise the working directory is left deleted and every later relative path fails
+    (for example tmp.parm7 written by tleap in the next test).
+    """
+    try:
+        if tree and osp.isdir(f):
+            fa = osp.realpath(f)
+            try:
+                cwd = osp.realpath(os.getcwd())
+            except OSError:   # cwd already deleted
+                cwd = None
+            if cwd is None or cwd == fa or cwd.startswith(fa + os.sep):
+                os.chdir(osp.dirname(fa))
+    except OSError:
+        pass
+    return _bt.tryRemove(f, verbose=verbose, tree=tree, wildcard=wildcard)
+
 def load(filename, gzip=0, encoding='latin1'):
     """
     Load an object (or several, as a tuple) dumped with :func:`dump`.
